@@ -59,7 +59,3 @@ def trigger_sync():
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
-```
-
-**`app/__init__.py`** — пустой файл:
-```
