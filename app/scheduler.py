@@ -41,4 +41,13 @@ def run_sync_all():
     if not tokens:
         logger.warning("WB_TOKENS не заданы, пропускаю синхронизацию")
         return
-    asyncio.run(asyncio.gather(*[sync_one_cabinet(t) for t in tokens]))
+
+    async def _run():
+        await asyncio.gather(*[sync_one_cabinet(t) for t in tokens])
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(_run())
+    finally:
+        loop.close()
