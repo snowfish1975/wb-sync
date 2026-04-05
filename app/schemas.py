@@ -3,7 +3,7 @@ from pydantic import BaseModel
 
 class ProductCharacteristicOut(BaseModel):
     id: int
-    cabinet_token_hint: str
+    cabinet_id: str
     nm_id: int
     characteristics: dict
     synced_at: datetime
@@ -12,10 +12,13 @@ class ProductCharacteristicOut(BaseModel):
 
 class SyncLogOut(BaseModel):
     id: int
-    cabinet_token_hint: str
+    cabinet_id: str
     status: str
     message: str | None
     records_saved: int
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+class TokenRequest(BaseModel):
+    token: str
