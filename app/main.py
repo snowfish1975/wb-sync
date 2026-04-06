@@ -8,8 +8,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
 
 from app.database import engine, Base, get_db
-from app.schemas import ProductCharacteristicOut, SyncLogOut, TokenRequest
-from app.crud import get_characteristics, get_sync_logs
+from app.schemas import ProductCharacteristicOut, SyncLogOut, TokenRequest, StockOut
+from app.crud import get_characteristics, get_sync_logs, get_stocks
 from app.scheduler import run_sync_all
 
 load_dotenv()
@@ -63,3 +63,13 @@ def trigger_sync():
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+@app.post("/api/stocks", response_model=list[StockOut])
+def list_stocks(
+    body: TokenRequest,
+    nm_id: int | None = Query(None, description="Артикул WB"),
+    db: Session = Depends(get_db),
+):
+    """Получить остатки на складах WB. Токен передаётся в теле запроса."""
+    cid = token_id(body.token)
+    return get_stocks(db, cabinet_id=cid, nm_id=nm_id)

@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from app.models import ProductCharacteristic, SyncLog
+from app.models import ProductCharacteristic, SyncLog, Stock
 from datetime import datetime
 
 def upsert_characteristic(db: Session, cabinet_id: str, nm_id: int, data: dict):
@@ -35,3 +35,34 @@ def get_characteristics(db: Session, cabinet_id: str = None, nm_id: int = None):
 
 def get_sync_logs(db: Session, limit: int = 50):
     return db.query(SyncLog).order_by(SyncLog.created_at.desc()).limit(limit).all()
+
+def upsert_stock(db: Session, cabinet_id: str, item: dict):
+    stmt = pg_insert(Stock).values(
+        cabinet_id=cabinet_id,
+        nm_id=item["nmId"],
+        chrt_id=item["chrtId"],
+        warehouse_id=item["warehouseId"],
+        warehouse_name=item["warehouseName"],
+        region_name=item["regionName"],
+        quantity=item["quantity"],
+        in_way_to_client=item["inWayToClient"],
+        in_way_from_client=item["inWayFromClient"],
+    ).on_conflict_do_update(
+        constraint="uq_stock",
+        set_={
+            "quantity": item["quantity"],
+            "in_way_to_client": item["inWayToClient"],
+            "in_way_from_client": item["inWayFromClient"],
+            "synced_at": datetime.utcnow(),
+        },
+    )
+    db.execute(stmt)
+    db.commit()
+
+def get_stocks(db: Session, cabinet_id: str = None, nm_id: int = None):
+    q = db.query(Stock)
+    if cabinet_id:
+        q = q.filter(Stock.cabinet_id == cabinet_id)
+    if nm_id:
+        q = q.filter(Stock.nm_id == nm_id)
+    return q.order_by(Stock.synced_at.desc()).limit(10000).all()
