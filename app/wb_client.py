@@ -35,7 +35,9 @@ async def fetch_product_characteristics(token: str, nm_ids: list[int]) -> list[d
                     body = resp.json()
                     break
                 except Exception as e:
-                    logger.warning(f"Попытка {attempt}/{max_attempts} неудачна: {e}")
+                    logger.warning(f"Попытка {attempt}/{max_attempts} неудачна: {type(e).__name__}: {e}")
+                    if hasattr(e, 'response') and e.response is not None:
+                        logger.warning(f"HTTP статус: {e.response.status_code}, тело: {e.response.text[:500]}")
                     if attempt == max_attempts:
                         raise RuntimeError(f"Не удалось выполнить запрос после {max_attempts} попыток: {e}")
                     await asyncio.sleep(retry_delay)
@@ -96,10 +98,12 @@ async def fetch_stocks(token: str) -> list[dict[str, Any]]:
                     body = resp.json()
                     break
                 except Exception as e:
-                    logger.warning(f"Остатки, попытка {attempt}/10: {e}")
+                    logger.warning(f"Остатки, попытка {attempt}/10: {type(e).__name__}: {e}")
+                    if hasattr(e, 'response') and e.response is not None:
+                        logger.warning(f"HTTP статус: {e.response.status_code}, тело: {e.response.text[:500]}")
                     if attempt == 10:
                         raise RuntimeError(f"Не удалось получить остатки: {e}")
-                    await asyncio.sleep(20)  # соблюдаем лимит WB
+                    await asyncio.sleep(20)
 
             items = body.get("data", {}).get("items", [])
             logger.info(f"Остатки: получено {len(items)} строк, offset={offset}")
