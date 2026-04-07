@@ -2,6 +2,22 @@ from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.models import ProductCharacteristic, SyncLog, Stock
 from datetime import datetime
+import os
+import hashlib
+
+
+def get_token_mapping() -> dict[str, str]:
+    tokens = [t.strip() for t in os.getenv("WB_TOKENS", "").split(",") if t.strip()]
+    names = [n.strip() for n in os.getenv("WB_NAMES", "").split(",") if n.strip()]
+
+    mapping = {}
+
+    for i, token in enumerate(tokens):
+        tid = hashlib.sha256(token.encode()).hexdigest()[:32]
+        name = names[i] if i < len(names) else tid[:8]
+        mapping[tid] = name
+
+    return mapping
 
 
 def upsert_characteristic(db: Session, cabinet_id: str, nm_id: int, data: dict):
@@ -55,7 +71,7 @@ def log_sync(
         message=message,
         records_saved=records,
     )
-    db.add(entry)  # ❗ commit убран
+    db.add(entry)
 
 
 def get_characteristics(
