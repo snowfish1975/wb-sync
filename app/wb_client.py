@@ -3,13 +3,15 @@ import asyncio
 import logging
 from typing import Any
 from datetime import datetime
+import os
+
 
 WB_BASE = "https://content-api.wildberries.ru"
 WB_ANALYTICS_BASE = "https://seller-analytics-api.wildberries.ru"
 logger = logging.getLogger(__name__)
 
 # Конфигурация Telegram
-TELEGRAM_BOT_TOKEN = "7633401840:AAFmQyWo6bw-YJTXRxo2EF_D90s0NOfqawY"
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = "356741753"
 
 async def send_telegram_message(message: str):
