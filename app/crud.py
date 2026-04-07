@@ -6,6 +6,7 @@ import os
 import hashlib
 import json
 
+
 # -------------------------
 # Загрузка токенов и имён
 # -------------------------
@@ -23,6 +24,7 @@ def load_tokens_mapping() -> dict[str, str]:
         tid = hashlib.sha256(token.encode()).hexdigest()[:32]
         mapping[tid] = name
     return mapping
+
 
 # -------------------------
 # Функции работы с БД
@@ -94,4 +96,4 @@ def get_stocks(db: Session, cabinet_id: str | None = None, nm_id: int | None = N
 
 
 def get_sync_logs(db: Session, limit: int = 50):
-    return q := db.query(SyncLog).order_by(SyncLog.created_at.desc()).limit(limit).all()
+    return db.query(SyncLog).order_by(SyncLog.created_at.desc()).limit(limit).all()
