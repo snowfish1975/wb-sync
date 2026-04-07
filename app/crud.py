@@ -13,7 +13,7 @@ def upsert_characteristic(db: Session, cabinet_id: str, nm_id: int, data: dict):
         set_={"characteristics": data, "synced_at": datetime.utcnow()},
     )
     db.execute(stmt)
-    db.commit()
+    # db.commit()
 
 def log_sync(db: Session, cabinet_id: str, status: str, message: str = None, records: int = 0):
     entry = SyncLog(
@@ -57,7 +57,7 @@ def upsert_stock(db: Session, cabinet_id: str, item: dict):
         },
     )
     db.execute(stmt)
-    db.commit()
+    # db.commit()
 
 def get_stocks(db: Session, cabinet_id: str = None, nm_id: int = None):
     q = db.query(Stock)
