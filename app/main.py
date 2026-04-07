@@ -24,7 +24,7 @@ def token_id(token: str) -> str:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    sync_hour = int(os.getenv("SYNC_HOUR", "3"))
+    sync_hour = int(os.getenv("SYNC_HOUR", "0"))    # 0:00 по UTC это 3:00 по МСК
     scheduler.add_job(run_sync_all, "cron", hour=sync_hour, minute=0, id="wb_sync")
     scheduler.start()
     yield
