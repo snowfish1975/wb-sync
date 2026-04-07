@@ -2,11 +2,38 @@ import os
 import asyncio
 import hashlib
 import logging
+import httpx
+from datetime import datetime
 from app.wb_client import fetch_product_characteristics, fetch_stocks
 from app.crud import upsert_characteristic, upsert_stock, log_sync
 from app.database import SessionLocal
 
 logger = logging.getLogger(__name__)
+
+# Конфигурация Telegram
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "356741753")
+
+async def send_telegram_message(message: str):
+    """Отправка сообщения в Telegram"""
+    if not TELEGRAM_BOT_TOKEN:
+        logger.warning("TELEGRAM_BOT_TOKEN не задан, сообщение не отправлено")
+        return
+    
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    async with httpx.AsyncClient(timeout=10) as client:
+        try:
+            response = await client.post(url, json={
+                "chat_id": TELEGRAM_CHAT_ID,
+                "text": message,
+                "parse_mode": "HTML"
+            })
+            if response.status_code == 200:
+                logger.info("✅ Сообщение отправлено в Telegram")
+            else:
+                logger.error(f"❌ Ошибка Telegram: {response.text}")
+        except Exception as e:
+            logger.error(f"Не удалось отправить сообщение: {e}")
 
 def get_tokens() -> list[str]:
     raw = os.getenv("WB_TOKENS", "")
@@ -16,9 +43,15 @@ def token_id(token: str) -> str:
     """SHA-256 хэш токена — уникальный идентификатор кабинета."""
     return hashlib.sha256(token.encode()).hexdigest()[:32]
 
-async def sync_one_cabinet(token: str):
+async def sync_one_cabinet(token: str) -> dict:
     tid = token_id(token)
     db = SessionLocal()
+    result = {
+        "tid": tid,
+        "chars_count": 0,
+        "stocks_count": 0,
+        "error": None
+    }
     try:
         # Характеристики
         logger.info(f"Кабинет {tid}: синхронизация характеристик...")
@@ -30,6 +63,7 @@ async def sync_one_cabinet(token: str):
                 upsert_characteristic(db, tid, nm_id, card)
                 chars_count += 1
         logger.info(f"Кабинет {tid}: характеристики сохранены ({chars_count})")
+        result["chars_count"] = chars_count
 
         # Остатки
         logger.info(f"Кабинет {tid}: синхронизация остатков...")
@@ -39,14 +73,18 @@ async def sync_one_cabinet(token: str):
             upsert_stock(db, tid, item)
             stocks_count += 1
         logger.info(f"Кабинет {tid}: остатки сохранены ({stocks_count})")
+        result["stocks_count"] = stocks_count
 
         log_sync(db, tid, "ok", records=chars_count + stocks_count)
 
     except Exception as e:
+        result["error"] = str(e)[:200]
         log_sync(db, tid, "error", message=str(e)[:490])
         logger.error(f"Ошибка кабинета {tid}: {e}")
     finally:
         db.close()
+    
+    return result
 
 def run_sync_all():
     tokens = get_tokens()
@@ -55,7 +93,36 @@ def run_sync_all():
         return
 
     async def _run():
-        await asyncio.gather(*[sync_one_cabinet(t) for t in tokens])
+        start_time = datetime.now()
+        results = await asyncio.gather(*[sync_one_cabinet(t) for t in tokens])
+        duration = (datetime.now() - start_time).total_seconds()
+        
+        # Формируем сообщение для Telegram
+        message = f"🔄 <b>Выгрузка данных WB</b>\n"
+        message += f"⏱ Время: {start_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+        message += f"⌛️ Длительность: {duration:.1f} сек\n\n"
+        
+        success_count = 0
+        error_count = 0
+        
+        for r in results:
+            if r["error"]:
+                error_count += 1
+                message += f"❌ <b>Кабинет {r['tid'][:8]}...</b>\n"
+                message += f"   Ошибка: {r['error'][:100]}\n\n"
+            else:
+                success_count += 1
+                message += f"✅ <b>Кабинет {r['tid'][:8]}...</b>\n"
+                message += f"   • Характеристики: {r['chars_count']} карточек\n"
+                message += f"   • Остатки: {r['stocks_count']} записей\n\n"
+        
+        message += f"📊 <b>Итог:</b> успешно: {success_count}, ошибок: {error_count}"
+        
+        # Отправляем в Telegram
+        await send_telegram_message(message)
+        
+        # Выводим в лог
+        logger.info(f"\n{message}")
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
