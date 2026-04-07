@@ -19,6 +19,7 @@ async def send_telegram_message(message: str):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     async with httpx.AsyncClient(timeout=10) as client:
         try:
+            logger.info(f"Sending message by bot: {TELEGRAM_BOT_TOKEN}\n{message}")
             await client.post(url, json={
                 "chat_id": TELEGRAM_CHAT_ID,
                 "text": message,
