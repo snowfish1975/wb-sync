@@ -6,25 +6,22 @@ from fastapi import FastAPI, Depends, Query
 from sqlalchemy.orm import Session
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
+import json
 
 from app.database import engine, Base, get_db
 from app.schemas import ProductCharacteristicOut, SyncLogOut, TokenRequest, StockOut
-from app.crud import (
-    get_characteristics,
-    get_sync_logs,
-    get_stocks,
-    get_token_mapping,
-)
+from app.crud import get_characteristics, get_sync_logs, get_stocks, load_tokens_mapping
 from app.scheduler import run_sync_all
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 
 Base.metadata.create_all(bind=engine)
-
 scheduler = BackgroundScheduler()
 
-
+# -------------------------
+# Утилиты
+# -------------------------
 def token_id(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()[:32]
 
@@ -38,30 +35,21 @@ async def lifespan(app: FastAPI):
     scheduler.shutdown()
 
 
-app = FastAPI(
-    title="WB Sync API",
-    description="Синхронизация данных Wildberries",
-    lifespan=lifespan,
-)
+app = FastAPI(title="WB Sync API", description="Синхронизация данных Wildberries", lifespan=lifespan)
 
-
+# -------------------------
+# Эндпоинты
+# -------------------------
 @app.get("/")
 def root():
     return {"status": "ok", "message": "WB Sync работает"}
 
 
-# --- PRODUCTS ---
 @app.post("/api/products", response_model=list[ProductCharacteristicOut])
-def list_products(
-    body: TokenRequest,
-    nm_id: int | None = Query(None),
-    db: Session = Depends(get_db),
-):
+def list_products(body: TokenRequest, nm_id: int | None = Query(None), db: Session = Depends(get_db)):
     cid = token_id(body.token)
-    mapping = get_token_mapping()
-
+    mapping = load_tokens_mapping()
     data = get_characteristics(db, cabinet_id=cid, nm_id=nm_id)
-
     return [
         {
             **{k: v for k, v in item.__dict__.items() if not k.startswith("_")},
@@ -71,18 +59,11 @@ def list_products(
     ]
 
 
-# --- STOCKS ---
 @app.post("/api/stocks", response_model=list[StockOut])
-def list_stocks(
-    body: TokenRequest,
-    nm_id: int | None = Query(None),
-    db: Session = Depends(get_db),
-):
+def list_stocks(body: TokenRequest, nm_id: int | None = Query(None), db: Session = Depends(get_db)):
     cid = token_id(body.token)
-    mapping = get_token_mapping()
-
+    mapping = load_tokens_mapping()
     data = get_stocks(db, cabinet_id=cid, nm_id=nm_id)
-
     return [
         {
             **{k: v for k, v in item.__dict__.items() if not k.startswith("_")},
@@ -92,13 +73,10 @@ def list_stocks(
     ]
 
 
-# --- LOGS ---
 @app.get("/api/logs", response_model=list[SyncLogOut])
 def list_logs(db: Session = Depends(get_db)):
-    mapping = get_token_mapping()
-
+    mapping = load_tokens_mapping()
     data = get_sync_logs(db)
-
     return [
         {
             **{k: v for k, v in item.__dict__.items() if not k.startswith("_")},
@@ -111,7 +89,6 @@ def list_logs(db: Session = Depends(get_db)):
 @app.post("/api/sync/trigger")
 def trigger_sync():
     import threading
-
     threading.Thread(target=run_sync_all, daemon=True).start()
     return {"status": "started"}
 
