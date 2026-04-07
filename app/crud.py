@@ -1,7 +1,8 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.models import ProductCharacteristic, SyncLog, Stock
 from datetime import datetime
+
 
 def upsert_characteristic(db: Session, cabinet_id: str, nm_id: int, data: dict):
     stmt = pg_insert(ProductCharacteristic).values(
@@ -13,7 +14,7 @@ def upsert_characteristic(db: Session, cabinet_id: str, nm_id: int, data: dict):
         set_={"characteristics": data, "synced_at": datetime.utcnow()},
     )
     db.execute(stmt)
-    # db.commit()
+
 
 def log_sync(db: Session, cabinet_id: str, status: str, message: str = None, records: int = 0):
     entry = SyncLog(
@@ -22,8 +23,8 @@ def log_sync(db: Session, cabinet_id: str, status: str, message: str = None, rec
         message=message,
         records_saved=records,
     )
-    db.add(entry)
-    db.commit()
+    db.add(entry)  # ❗ commit убран
+
 
 def get_characteristics(db: Session, cabinet_id: str = None, nm_id: int = None):
     q = db.query(ProductCharacteristic)
@@ -33,8 +34,10 @@ def get_characteristics(db: Session, cabinet_id: str = None, nm_id: int = None):
         q = q.filter(ProductCharacteristic.nm_id == nm_id)
     return q.order_by(ProductCharacteristic.synced_at.desc()).limit(500).all()
 
+
 def get_sync_logs(db: Session, limit: int = 50):
     return db.query(SyncLog).order_by(SyncLog.created_at.desc()).limit(limit).all()
+
 
 def upsert_stock(db: Session, cabinet_id: str, item: dict):
     stmt = pg_insert(Stock).values(
@@ -57,7 +60,7 @@ def upsert_stock(db: Session, cabinet_id: str, item: dict):
         },
     )
     db.execute(stmt)
-    # db.commit()
+
 
 def get_stocks(db: Session, cabinet_id: str = None, nm_id: int = None):
     q = db.query(Stock)
