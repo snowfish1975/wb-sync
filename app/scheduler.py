@@ -6,8 +6,8 @@ import httpx
 import json
 from datetime import datetime
 
-from app.wb_client import fetch_product_characteristics, fetch_stocks
-from app.crud import upsert_characteristic, upsert_stock, log_sync
+from app.wb_client import fetch_product_characteristics, fetch_stocks, fetch_orders_last_40_days
+from app.crud import upsert_characteristic, upsert_stock, log_sync, upsert_order
 from app.database import SessionLocal
 
 logger = logging.getLogger(__name__)
@@ -125,6 +125,8 @@ async def sync_one_cabinet(token: str, name: str) -> dict:
         "name": name,
         "chars_count": 0,
         "stocks_count": 0,
+        "orders_count": 0,
+        "orders_error": None,
         "error": None,
     }
 
@@ -153,7 +155,21 @@ async def sync_one_cabinet(token: str, name: str) -> dict:
         result["stocks_count"] = stocks_count
         logger.info(f"[{name}] остатки сохранены ({stocks_count})")
 
-        log_sync(db, tid, "ok", records=chars_count + stocks_count)
+        # Заказы за последние 40 дней
+        logger.info(f"[{name}] синхронизация заказов...")
+        try:
+            orders = await fetch_orders_last_40_days(token)
+            orders_count = 0
+            for order in orders:
+                upsert_order(db, tid, order)
+                orders_count += 1
+            result["orders_count"] = orders_count
+            logger.info(f"[{name}] заказы сохранены ({orders_count})")
+        except Exception as e:
+            logger.error(f"[{name}] ошибка при синхронизации заказов: {e}")
+            result["orders_error"] = str(e)[:200]
+
+        log_sync(db, tid, "ok", records=chars_count + stocks_count + orders_count)
 
         db.commit()
 
@@ -213,7 +229,8 @@ def run_sync_all():
                 success_count += 1
                 message += f"✅ <b>{r['name']}</b>\n"
                 message += f"   • Характеристики: {r['chars_count']}\n"
-                message += f"   • Остатки: {r['stocks_count']}\n\n"
+                message += f"   • Остатки: {r['stocks_count']}\n"
+                message += f"   • Заказы: {r['orders_count']}\n\n"
 
         message += f"📊 <b>Итог:</b> успешно: {success_count}, ошибок: {error_count}"
 
