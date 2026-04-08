@@ -214,10 +214,12 @@ async def fetch_orders_last_40_days(token: str) -> list[dict[str, Any]]:
     
     # Вычисляем пороговую дату (40 дней назад от сегодня в Москве)
     now_moscow = datetime.now(MOSCOW_TZ)
-    threshold_date = now_moscow - timedelta(days=40)
-    threshold_date_str = threshold_date.strftime("%Y-%m-%d")
+    today_start = now_moscow.replace(hour=0, minute=0, second=0, microsecond=0)
+    threshold_date = today_start - timedelta(days=40)  # 40 дней назад от начала сегодня
+    tomorrow_start = today_start + timedelta(days=1)   # начало следующего дня (для фильтрации)
     
     logger.info(f"Пороговая дата для фильтрации заказов: {threshold_date_str}")
+    logger.info(f"Исключаем заказы от: {today_start.strftime('%Y-%m-%d')} и позже")
     
     # Фильтруем заказы: оставляем только созданные за последние 40 дней
     filtered_orders = []
@@ -239,7 +241,7 @@ async def fetch_orders_last_40_days(token: str) -> list[dict[str, Any]]:
             order_date_only = order_date_moscow.date()
             threshold_date_only = threshold_date.date()
             
-            if order_date_only >= threshold_date_only:
+            if order_date_only >= threshold_date_only and order_date_only < today_start.date():
                 filtered_orders.append(order)
             else:
                 filtered_out_count += 1
