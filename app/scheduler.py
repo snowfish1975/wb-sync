@@ -3,6 +3,7 @@ import asyncio
 import hashlib
 import logging
 import httpx
+import json
 from datetime import datetime
 
 from app.wb_client import fetch_product_characteristics, fetch_stocks
@@ -16,30 +17,73 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "356741753")
 
 
-# --- TOKENS + NAMES ---
-def get_token_mapping() -> dict[str, str]:
+# --- TOKENS + NAMES (НОВАЯ ВЕРСИЯ) ---
+def load_tokens_from_json() -> list[dict]:
     """
-    Возвращает:
-    {
-        cabinet_id: "Имя продавца"
-    }
+    Загружает токены и имена из WB_TOKENS_JSON
+    Ожидаемый формат: {"Имя продавца": "токен", ...}
     """
-    tokens = [t.strip() for t in os.getenv("WB_TOKENS", "").split(",") if t.strip()]
-    names = [n.strip() for n in os.getenv("WB_NAMES", "").split(",") if n.strip()]
-
-    mapping = {}
-
-    for i, token in enumerate(tokens):
-        tid = token_id(token)
-        name = names[i] if i < len(names) else tid[:8]  # fallback
-        mapping[tid] = name
-
-    return mapping
+    raw = os.getenv("WB_TOKENS_JSON", "{}")
+    try:
+        data = json.loads(raw)
+        if not data:
+            logger.warning("WB_TOKENS_JSON пуст или не задан")
+            return []
+        
+        # Преобразуем в список словарей
+        tokens_list = []
+        for name, token in data.items():
+            if token and name:
+                tokens_list.append({
+                    "name": name,
+                    "token": token,
+                    "cabinet_id": token_id(token)
+                })
+        
+        logger.info(f"Загружено {len(tokens_list)} кабинетов из WB_TOKENS_JSON")
+        return tokens_list
+    except json.JSONDecodeError as e:
+        logger.error(f"Ошибка парсинга WB_TOKENS_JSON: {e}")
+        return []
 
 
 def get_tokens() -> list[str]:
+    """Получение списка токенов (только для совместимости со старым кодом)"""
+    tokens_data = load_tokens_from_json()
+    if tokens_data:
+        return [item["token"] for item in tokens_data]
+    
+    # Fallback на старый формат (для обратной совместимости)
     raw = os.getenv("WB_TOKENS", "")
     return [t.strip() for t in raw.split(",") if t.strip()]
+
+
+def get_token_mapping() -> dict[str, str]:
+    """
+    Возвращает: {cabinet_id: "Имя продавца"}
+    """
+    tokens_data = load_tokens_from_json()
+    mapping = {}
+    
+    for item in tokens_data:
+        mapping[item["cabinet_id"]] = item["name"]
+    
+    # Если нет данных из JSON, пробуем старый формат
+    if not mapping:
+        tokens = [t.strip() for t in os.getenv("WB_TOKENS", "").split(",") if t.strip()]
+        names = [n.strip() for n in os.getenv("WB_NAMES", "").split(",") if n.strip()]
+        
+        for i, token in enumerate(tokens):
+            tid = token_id(token)
+            name = names[i] if i < len(names) else tid[:8]
+            mapping[tid] = name
+    
+    return mapping
+
+
+def get_cabinets_list() -> list[dict]:
+    """Получение списка кабинетов с именами и токенами"""
+    return load_tokens_from_json()
 
 
 def token_id(token: str) -> str:
@@ -133,21 +177,20 @@ async def sync_one_cabinet(token: str, name: str) -> dict:
 
 # --- RUN ALL ---
 def run_sync_all():
-    tokens = get_tokens()
-    mapping = get_token_mapping()
-
-    if not tokens:
-        logger.warning("WB_TOKENS не заданы, пропускаю синхронизацию")
+    cabinets = get_cabinets_list()
+    
+    if not cabinets:
+        logger.warning("Нет кабинетов для синхронизации. Проверьте WB_TOKENS_JSON")
         return
+
+    logger.info(f"Запущена синхронизация для {len(cabinets)} кабинетов")
 
     async def _run():
         start_time = datetime.now()
 
         tasks = []
-        for token in tokens:
-            tid = token_id(token)
-            name = mapping.get(tid, tid[:8])
-            tasks.append(sync_one_cabinet(token, name))
+        for cabinet in cabinets:
+            tasks.append(sync_one_cabinet(cabinet["token"], cabinet["name"]))
 
         results = await asyncio.gather(*tasks)
 
