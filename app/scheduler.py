@@ -203,11 +203,15 @@ def run_sync_all():
 
     async def _run():
         start_time = datetime.now()
-
-        tasks = []
-        for cabinet in cabinets:
-            tasks.append(sync_one_cabinet(cabinet["token"], cabinet["name"]))
-
+        
+        # Ограничиваем количество параллельных задач (3-5 кабинетов одновременно)
+        semaphore = asyncio.Semaphore(5)  # <-- ИЗМЕНИТЕ ЭТО ЗНАЧЕНИЕ (3-5)
+        
+        async def sync_with_limit(cabinet):
+            async with semaphore:
+                return await sync_one_cabinet(cabinet["token"], cabinet["name"])
+        
+        tasks = [sync_with_limit(cabinet) for cabinet in cabinets]
         results = await asyncio.gather(*tasks)
 
         duration = (datetime.now() - start_time).total_seconds()
@@ -215,8 +219,9 @@ def run_sync_all():
         # --- Telegram ---
         message = f"🔄 <b>Выгрузка данных WB</b>\n"
         message += f"⏱ Время: {start_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
-        message += f"⌛️ Длительность: {duration:.1f} сек\n\n"
-
+        hours = int(duration // 3600)
+        minutes = int((duration % 3600) // 60)
+        message += f"⌛️ Длительность: {hours:02d}:{minutes:02d}\n\n"
         success_count = 0
         error_count = 0
 
@@ -230,7 +235,11 @@ def run_sync_all():
                 message += f"✅ <b>{r['name']}</b>\n"
                 message += f"   • Характеристики: {r['chars_count']}\n"
                 message += f"   • Остатки: {r['stocks_count']}\n"
-                message += f"   • Заказы: {r['orders_count']}\n\n"
+                if r.get('orders_count', 0) > 0 or r.get('orders_error'):
+                    message += f"   • Заказы: {r.get('orders_count', 0)}\n"
+                if r.get('orders_error'):
+                    message += f"   ⚠️ Ошибка заказов: {r['orders_error'][:80]}\n"
+                message += "\n"
 
         message += f"📊 <b>Итог:</b> успешно: {success_count}, ошибок: {error_count}"
 
