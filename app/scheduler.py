@@ -6,8 +6,8 @@ import httpx
 import json
 from datetime import datetime
 
-from app.wb_client import fetch_product_characteristics, fetch_stocks, fetch_orders_last_40_days
-from app.crud import upsert_characteristic, upsert_stock, log_sync, upsert_order
+from app.wb_client import fetch_product_characteristics, fetch_stocks, fetch_orders_last_40_days, fetch_prices
+from app.crud import upsert_characteristic, upsert_stock, log_sync, upsert_order, upsert_price
 from app.database import SessionLocal
 
 logger = logging.getLogger(__name__)
@@ -126,6 +126,7 @@ async def sync_one_cabinet(token: str, name: str) -> dict:
         "chars_count": 0,
         "stocks_count": 0,
         "orders_count": 0,
+        "prices_count": 0,
         "orders_error": None,
         "error": None,
     }
@@ -157,9 +158,9 @@ async def sync_one_cabinet(token: str, name: str) -> dict:
 
         # Заказы за последние 40 дней
         logger.info(f"[{name}] синхронизация заказов...")
+        orders_count = 0
         try:
             orders = await fetch_orders_last_40_days(token)
-            orders_count = 0
             for order in orders:
                 upsert_order(db, tid, order)
                 orders_count += 1
@@ -168,10 +169,22 @@ async def sync_one_cabinet(token: str, name: str) -> dict:
         except Exception as e:
             logger.error(f"[{name}] ошибка при синхронизации заказов: {e}")
             result["orders_error"] = str(e)[:200]
-            orders_count = 0
 
-        log_sync(db, tid, "ok", records=chars_count + stocks_count + orders_count)
 
+        # --- ЦЕНЫ ---
+        logger.info(f"[{name}] синхронизация цен...")
+        prices = await fetch_prices(token)
+        prices_count = 0
+
+        for item in prices:
+            for size in item.get("sizes", []):
+                upsert_price(db, tid, item, size)
+                prices_count += 1
+
+        result["prices_count"] = prices_count
+        logger.info(f"[{name}] цены сохранены ({prices_count})")
+
+        log_sync(db, tid, "ok", records=chars_count + stocks_count + orders_count + prices_count)
         db.commit()
 
     except Exception as e:
@@ -240,6 +253,7 @@ def run_sync_all():
                     message += f"   • Заказы: {r.get('orders_count', 0)}\n"
                 if r.get('orders_error'):
                     message += f"   ⚠️ Ошибка заказов: {r['orders_error'][:80]}\n"
+                message += f"   • Цены: {r['prices_count']}\n"
                 message += "\n"
 
         message += f"📊 <b>Итог:</b> успешно: {success_count}, ошибок: {error_count}"

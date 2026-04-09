@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 WB_BASE = "https://content-api.wildberries.ru"
 WB_ANALYTICS_BASE = "https://seller-analytics-api.wildberries.ru"
 WB_STATS_BASE = "https://statistics-api.wildberries.ru"
+WB_PRICES_BASE = "https://discounts-prices-api.wildberries.ru"
 logger = logging.getLogger(__name__)
 
 # Московский часовой пояс (UTC+3)
@@ -254,3 +255,39 @@ async def fetch_orders_last_40_days(token: str) -> list[dict[str, Any]]:
     logger.info(f"Заказы: после фильтрации осталось {len(filtered_orders)} из {len(orders)} (отфильтровано {filtered_out_count})")
     
     return filtered_orders
+
+
+async def fetch_prices(token: str) -> list[dict]:
+    headers = {"Authorization": token}
+    limit = 1000
+    offset = 0
+    results = []
+
+    async with httpx.AsyncClient(timeout=60) as client:
+        while True:
+            params = {
+                "limit": limit,
+                "offset": offset,
+            }
+
+            resp = await client.get(
+                f"{WB_PRICES_BASE}/api/v2/list/goods/filter",
+                headers=headers,
+                params=params,
+            )
+            resp.raise_for_status()
+
+            body = resp.json()
+            items = body.get("data", {}).get("listGoods", [])
+
+            results.extend(items)
+
+            if not items:
+                break
+
+            offset += limit
+
+            # ⚠️ соблюдаем rate limit
+            await asyncio.sleep(0.7)
+
+    return results

@@ -96,3 +96,29 @@ class Order(Base):
     __table_args__ = (
         UniqueConstraint("cabinet_id", "srid", name="uq_cabinet_order"),
     )
+
+
+class Price(Base):
+    __tablename__ = "prices"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    cabinet_id: Mapped[str] = mapped_column(String(32))
+    nm_id: Mapped[int] = mapped_column(Integer)
+    chrt_id: Mapped[int] = mapped_column(Integer)
+
+    price: Mapped[int] = mapped_column(Integer)
+    discounted_price: Mapped[float] = mapped_column(Float)
+    club_discounted_price: Mapped[float] = mapped_column(Float)
+
+    currency: Mapped[str] = mapped_column(String(10))
+
+    discount: Mapped[int] = mapped_column(Integer)
+    club_discount: Mapped[int] = mapped_column(Integer)
+
+    tech_size_name: Mapped[str] = mapped_column(String(50))
+
+    synced_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("cabinet_id", "chrt_id", name="uq_price"),
+    )

@@ -10,8 +10,8 @@ from dotenv import load_dotenv
 import json
 
 from app.database import engine, Base, get_db
-from app.schemas import ProductCharacteristicOut, SyncLogOut, TokenRequest, StockOut, OrderOut
-from app.crud import get_characteristics, get_sync_logs, get_stocks, get_orders, load_tokens_mapping
+from app.schemas import ProductCharacteristicOut, SyncLogOut, TokenRequest, StockOut, OrderOut, PriceOut
+from app.crud import get_characteristics, get_sync_logs, get_stocks, get_orders, load_tokens_mapping, get_prices
 from app.scheduler import run_sync_all
 
 load_dotenv()
@@ -106,6 +106,26 @@ def list_orders(
     if nm_id:
         data = [item for item in data if item.nm_id == nm_id]
     
+    return [
+        {
+            **{k: v for k, v in item.__dict__.items() if not k.startswith("_")},
+            "seller_name": mapping.get(item.cabinet_id, item.cabinet_id[:8]),
+        }
+        for item in data
+    ]
+
+
+@app.post("/api/prices", response_model=list[PriceOut])
+def list_prices(
+    body: TokenRequest,
+    nm_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    cid = token_id(body.token)
+    mapping = load_tokens_mapping()
+
+    data = get_prices(db, cabinet_id=cid, nm_id=nm_id)
+
     return [
         {
             **{k: v for k, v in item.__dict__.items() if not k.startswith("_")},

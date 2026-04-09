@@ -76,3 +76,20 @@ class OrderOut(BaseModel):
     synced_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class PriceOut(BaseModel):
+    id: int
+    nm_id: int
+    chrt_id: int
+    price: int
+    discounted_price: float
+    club_discounted_price: float
+    currency: str
+    discount: int
+    club_discount: int
+    tech_size_name: str
+    synced_at: datetime
+    seller_name: str
+
+    model_config = {"from_attributes": True}

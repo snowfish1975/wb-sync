@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from app.models import ProductCharacteristic, SyncLog, Stock, Order
+from app.models import ProductCharacteristic, SyncLog, Stock, Order, Price
 from datetime import datetime, timedelta
 import os
 import hashlib
@@ -167,3 +167,41 @@ def get_orders(db: Session, cabinet_id: str | None = None, days_back: int = 40, 
 
 def get_sync_logs(db: Session, limit: int = 50):
     return db.query(SyncLog).order_by(SyncLog.created_at.desc()).limit(limit).all()
+
+
+def upsert_price(db: Session, cabinet_id: str, item: dict, size: dict):
+    stmt = pg_insert(Price).values(
+        cabinet_id=cabinet_id,
+        nm_id=item["nmID"],
+        chrt_id=size["sizeID"],
+        price=size["price"],
+        discounted_price=size["discountedPrice"],
+        club_discounted_price=size["clubDiscountedPrice"],
+        currency=size.get("currencyIsoCode4217", "RUB"),
+        discount=size["discount"],
+        club_discount=size["clubDiscount"],
+        tech_size_name=size["techSizeName"],
+    ).on_conflict_do_update(
+        constraint="uq_price",
+        set_={
+            "price": size["price"],
+            "discounted_price": size["discountedPrice"],
+            "club_discounted_price": size["clubDiscountedPrice"],
+            "discount": size["discount"],
+            "club_discount": size["clubDiscount"],
+            "synced_at": datetime.utcnow(),
+        },
+    )
+    db.execute(stmt)
+
+
+def get_prices(db: Session, cabinet_id: str = None, nm_id: int = None):
+    q = db.query(Price)
+
+    if cabinet_id:
+        q = q.filter(Price.cabinet_id == cabinet_id)
+
+    if nm_id:
+        q = q.filter(Price.nm_id == nm_id)
+
+    return q.order_by(Price.synced_at.desc()).limit(10000).all()
