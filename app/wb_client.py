@@ -216,6 +216,7 @@ async def fetch_orders_last_40_days(token: str) -> list[dict[str, Any]]:
     now_moscow = datetime.now(MOSCOW_TZ)
     today_start = now_moscow.replace(hour=0, minute=0, second=0, microsecond=0)
     threshold_date = today_start - timedelta(days=40)  # 40 дней назад от начала сегодня
+    threshold_date_str = threshold_date.strftime("%Y-%m-%d")  # ← добавьте эту строку
     tomorrow_start = today_start + timedelta(days=1)   # начало следующего дня (для фильтрации)
     
     logger.info(f"Пороговая дата для фильтрации заказов: {threshold_date_str}")
