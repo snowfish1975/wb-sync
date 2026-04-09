@@ -15,6 +15,7 @@ from app.scheduler import run_sync_all
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 scheduler = BackgroundScheduler()
 
