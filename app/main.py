@@ -16,7 +16,6 @@ from app.scheduler import run_sync_all
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 
-Base.metadata.create_all(bind=engine)
 scheduler = BackgroundScheduler()
 
 # -------------------------
@@ -28,6 +27,18 @@ def token_id(token: str) -> str:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Ждём базу — до 10 попыток с интервалом 5 секунд
+    for attempt in range(1, 11):
+        try:
+            Base.metadata.create_all(bind=engine)
+            logger.info("Подключение к БД успешно, таблицы созданы")
+            break
+        except Exception as e:
+            logger.warning(f"БД не готова, попытка {attempt}/10: {e}")
+            if attempt == 10:
+                raise RuntimeError("Не удалось подключиться к БД после 10 попыток")
+            await asyncio.sleep(5)
+            
     sync_hour = int(os.getenv("SYNC_HOUR", "3"))
     scheduler.add_job(run_sync_all, "cron", hour=sync_hour, minute=0, id="wb_sync")
     scheduler.start()
