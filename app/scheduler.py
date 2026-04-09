@@ -168,6 +168,7 @@ async def sync_one_cabinet(token: str, name: str) -> dict:
         except Exception as e:
             logger.error(f"[{name}] ошибка при синхронизации заказов: {e}")
             result["orders_error"] = str(e)[:200]
+            orders_count = 0
 
         log_sync(db, tid, "ok", records=chars_count + stocks_count + orders_count)
 
