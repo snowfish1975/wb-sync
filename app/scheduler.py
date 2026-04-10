@@ -228,7 +228,7 @@ def run_sync_all():
         start_time = datetime.now()
         
         # Ограничиваем количество параллельных задач (3-5 кабинетов одновременно)
-        semaphore = asyncio.Semaphore(5)  # <-- ИЗМЕНИТЕ ЭТО ЗНАЧЕНИЕ (3-5)
+        semaphore = asyncio.Semaphore(1)
         
         async def sync_with_limit(cabinet):
             async with semaphore:

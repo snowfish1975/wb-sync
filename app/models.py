@@ -3,6 +3,7 @@ from sqlalchemy import String, Integer, DateTime, JSON, UniqueConstraint, Float,
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 
+
 class ProductCharacteristic(Base):
     __tablename__ = "product_characteristics"
 

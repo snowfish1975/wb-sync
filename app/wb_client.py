@@ -263,6 +263,9 @@ async def fetch_prices(token: str) -> list[dict]:
     offset = 0
     results = []
 
+    max_attempts = 5
+    retry_delay = 2
+
     async with httpx.AsyncClient(timeout=60) as client:
         while True:
             params = {
@@ -270,15 +273,28 @@ async def fetch_prices(token: str) -> list[dict]:
                 "offset": offset,
             }
 
-            resp = await client.get(
-                f"{WB_PRICES_BASE}/api/v2/list/goods/filter",
-                headers=headers,
-                params=params,
-            )
-            resp.raise_for_status()
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    resp = await client.get(
+                        f"{WB_PRICES_BASE}/api/v2/list/goods/filter",
+                        headers=headers,
+                        params=params,
+                    )
+                    resp.raise_for_status()
+                    body = resp.json()
+                    break
 
-            body = resp.json()
+                except Exception as e:
+                    logger.warning(f"Цены, попытка {attempt}/{max_attempts}: {e}")
+
+                    if attempt == max_attempts:
+                        raise RuntimeError(f"Не удалось получить цены: {e}")
+
+                    await asyncio.sleep(retry_delay * attempt)
+
             items = body.get("data", {}).get("listGoods", [])
+
+            logger.info(f"Цены: получено {len(items)} товаров, offset={offset}")
 
             results.extend(items)
 
@@ -287,7 +303,8 @@ async def fetch_prices(token: str) -> list[dict]:
 
             offset += limit
 
-            # ⚠️ соблюдаем rate limit
+            # соблюдаем rate limit WB
             await asyncio.sleep(0.7)
 
+    logger.info(f"Цены: всего получено {len(results)} товаров")
     return results
