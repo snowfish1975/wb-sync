@@ -188,8 +188,8 @@ def upsert_price(db: Session, cabinet_id: str, item: dict, size: dict):
             "price": size.get("price", 0),
             "discounted_price": size.get("discountedPrice", 0),
             "club_discounted_price": size.get("clubDiscountedPrice", 0),
-            "discount": size.get("discount", 0),          # ✅ фикс
-            "club_discount": size.get("clubDiscount", 0), # ✅ фикс
+            "discount": size.get("discount", 0),           # ✅ фикс
+            "club_discount": size.get("clubDiscount", 0),  # ✅ фикс
             "synced_at": datetime.utcnow(),
         },
     )
