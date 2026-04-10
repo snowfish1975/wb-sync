@@ -142,6 +142,7 @@ async def sync_one_cabinet(token: str, name: str) -> dict:
                 upsert_characteristic(db, tid, nm_id, card)
                 chars_count += 1
 
+        db.commit()
         result["chars_count"] = chars_count
         logger.info(f"[{name}] характеристики сохранены ({chars_count})")
 
@@ -153,6 +154,7 @@ async def sync_one_cabinet(token: str, name: str) -> dict:
             upsert_stock(db, tid, item)
             stocks_count += 1
 
+        db.commit()
         result["stocks_count"] = stocks_count
         logger.info(f"[{name}] остатки сохранены ({stocks_count})")
 
@@ -164,9 +166,12 @@ async def sync_one_cabinet(token: str, name: str) -> dict:
             for order in orders:
                 upsert_order(db, tid, order)
                 orders_count += 1
+
+            db.commit()
             result["orders_count"] = orders_count
             logger.info(f"[{name}] заказы сохранены ({orders_count})")
         except Exception as e:
+            db.rollback()
             logger.error(f"[{name}] ошибка при синхронизации заказов: {e}")
             result["orders_error"] = str(e)[:200]
 
@@ -178,9 +183,13 @@ async def sync_one_cabinet(token: str, name: str) -> dict:
 
         for item in prices:
             for size in item.get("sizes", []):
-                upsert_price(db, tid, item, size)
-                prices_count += 1
+                try:
+                    upsert_price(db, tid, item, size)
+                    prices_count += 1
+                except Exception as e:
+                    logger.warning(f"[{name}] ошибка price: {e}")
 
+        db.commit()
         result["prices_count"] = prices_count
         logger.info(f"[{name}] цены сохранены ({prices_count})")
 

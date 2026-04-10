@@ -50,8 +50,8 @@ def upsert_stock(db: Session, cabinet_id: str, item: dict):
         nm_id=item["nmId"],
         chrt_id=item["chrtId"],
         warehouse_id=item["warehouseId"],
-        warehouse_name=item["warehouseName"],
-        region_name=item["regionName"],
+        warehouse_name=item.get("warehouseName", ""),
+        region_name=item.get("regionName", ""),
         quantity=item["quantity"],
         in_way_to_client=item["inWayToClient"],
         in_way_from_client=item["inWayFromClient"],
@@ -172,23 +172,24 @@ def get_sync_logs(db: Session, limit: int = 50):
 def upsert_price(db: Session, cabinet_id: str, item: dict, size: dict):
     stmt = pg_insert(Price).values(
         cabinet_id=cabinet_id,
-        nm_id=item["nmID"],
-        chrt_id=size["sizeID"],
-        price=size["price"],
-        discounted_price=size["discountedPrice"],
-        club_discounted_price=size["clubDiscountedPrice"],
+        nm_id=item.get("nmID"),
+        chrt_id=size.get("sizeID"),
+        price=size.get("price", 0),
+        discounted_price=size.get("discountedPrice", 0),
+        club_discounted_price=size.get("clubDiscountedPrice", 0),
         currency=size.get("currencyIsoCode4217", "RUB"),
-        discount=size["discount"],
-        club_discount=size["clubDiscount"],
-        tech_size_name=size["techSizeName"],
+        discount=size.get("discount", 0),                # ✅ фикс
+        club_discount=size.get("clubDiscount", 0),       # ✅ фикс
+        tech_size_name=size.get("techSizeName", ""),
+        synced_at=datetime.utcnow(),
     ).on_conflict_do_update(
         constraint="uq_price",
         set_={
-            "price": size["price"],
-            "discounted_price": size["discountedPrice"],
-            "club_discounted_price": size["clubDiscountedPrice"],
-            "discount": size["discount"],
-            "club_discount": size["clubDiscount"],
+            "price": size.get("price", 0),
+            "discounted_price": size.get("discountedPrice", 0),
+            "club_discounted_price": size.get("clubDiscountedPrice", 0),
+            "discount": size.get("discount", 0),          # ✅ фикс
+            "club_discount": size.get("clubDiscount", 0), # ✅ фикс
             "synced_at": datetime.utcnow(),
         },
     )
