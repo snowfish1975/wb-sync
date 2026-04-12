@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from app.models import ProductCharacteristic, SyncLog, Stock, Order, Price
+from app.models import ProductCharacteristic, SyncLog, Stock, Order, Price, SalesReport
 from datetime import datetime, timedelta
 import os
 import hashlib
@@ -206,3 +206,123 @@ def get_prices(db: Session, cabinet_id: str = None, nm_id: int = None):
         q = q.filter(Price.nm_id == nm_id)
 
     return q.order_by(Price.synced_at.desc()).limit(10000).all()
+
+
+def upsert_sales_report_row(db: Session, cabinet_id: str, row: dict):
+    def parse_dt(val: str | None) -> datetime | None:
+        if not val:
+            return None
+        for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(val[:19], fmt[:len(val[:19])])
+            except Exception:
+                continue
+        return None
+
+    stmt = pg_insert(SalesReport).values(
+        cabinet_id=cabinet_id,
+        rrd_id=row.get("rrd_id"),
+        realizationreport_id=row.get("realizationreport_id"),
+        gi_id=row.get("gi_id"),
+        nm_id=row.get("nm_id"),
+        shk_id=row.get("shk_id"),
+        assembly_id=row.get("assembly_id"),
+        srid=row.get("srid"),
+        order_uid=row.get("order_uid"),
+        date_from=parse_dt(row.get("date_from")),
+        date_to=parse_dt(row.get("date_to")),
+        create_dt=parse_dt(row.get("create_dt")),
+        rr_dt=parse_dt(row.get("rr_dt")),
+        order_dt=parse_dt(row.get("order_dt")),
+        sale_dt=parse_dt(row.get("sale_dt")),
+        fix_tariff_date_from=parse_dt(row.get("fix_tariff_date_from")),
+        fix_tariff_date_to=parse_dt(row.get("fix_tariff_date_to")),
+        subject_name=row.get("subject_name"),
+        brand_name=row.get("brand_name"),
+        sa_name=row.get("sa_name"),
+        ts_name=row.get("ts_name"),
+        barcode=row.get("barcode"),
+        doc_type_name=row.get("doc_type_name"),
+        supplier_oper_name=row.get("supplier_oper_name"),
+        office_name=row.get("office_name"),
+        quantity=row.get("quantity"),
+        currency_name=row.get("currency_name"),
+        retail_price=row.get("retail_price"),
+        retail_amount=row.get("retail_amount"),
+        retail_price_withdisc_rub=row.get("retail_price_withdisc_rub"),
+        sale_percent=row.get("sale_percent"),
+        commission_percent=row.get("commission_percent"),
+        product_discount_for_report=row.get("product_discount_for_report"),
+        supplier_promo=row.get("supplier_promo"),
+        ppvz_spp_prc=row.get("ppvz_spp_prc"),
+        ppvz_kvw_prc_base=row.get("ppvz_kvw_prc_base"),
+        ppvz_kvw_prc=row.get("ppvz_kvw_prc"),
+        ppvz_sales_commission=row.get("ppvz_sales_commission"),
+        ppvz_for_pay=row.get("ppvz_for_pay"),
+        ppvz_reward=row.get("ppvz_reward"),
+        ppvz_vw=row.get("ppvz_vw"),
+        ppvz_vw_nds=row.get("ppvz_vw_nds"),
+        sup_rating_prc_up=row.get("sup_rating_prc_up"),
+        is_kgvp_v2=row.get("is_kgvp_v2"),
+        acquiring_fee=row.get("acquiring_fee"),
+        acquiring_percent=row.get("acquiring_percent"),
+        acquiring_bank=row.get("acquiring_bank"),
+        payment_processing=row.get("payment_processing"),
+        delivery_amount=row.get("delivery_amount"),
+        return_amount=row.get("return_amount"),
+        delivery_rub=row.get("delivery_rub"),
+        gi_box_type_name=row.get("gi_box_type_name"),
+        rebill_logistic_cost=row.get("rebill_logistic_cost"),
+        rebill_logistic_org=row.get("rebill_logistic_org"),
+        dlv_prc=row.get("dlv_prc"),
+        penalty=row.get("penalty"),
+        additional_payment=row.get("additional_payment"),
+        storage_fee=row.get("storage_fee"),
+        deduction=row.get("deduction"),
+        acceptance=row.get("acceptance"),
+        site_country=row.get("site_country"),
+        ppvz_office_name=row.get("ppvz_office_name"),
+        ppvz_office_id=row.get("ppvz_office_id"),
+        ppvz_supplier_id=row.get("ppvz_supplier_id"),
+        ppvz_supplier_name=row.get("ppvz_supplier_name"),
+        ppvz_inn=row.get("ppvz_inn"),
+        sticker_id=row.get("sticker_id"),
+        declaration_number=row.get("declaration_number"),
+        bonus_type_name=row.get("bonus_type_name"),
+        kiz=row.get("kiz"),
+        srv_dbs=row.get("srv_dbs"),
+        is_legal_entity=row.get("is_legal_entity"),
+        report_type=row.get("report_type"),
+        synced_at=datetime.utcnow(),
+    ).on_conflict_do_update(
+        constraint="uq_sales_report_row",
+        set_={
+            "ppvz_for_pay": row.get("ppvz_for_pay"),
+            "penalty": row.get("penalty"),
+            "additional_payment": row.get("additional_payment"),
+            "storage_fee": row.get("storage_fee"),
+            "deduction": row.get("deduction"),
+            "synced_at": datetime.utcnow(),
+        },
+    )
+    db.execute(stmt)
+
+
+def get_sales_report(
+    db: Session,
+    cabinet_id: str | None = None,
+    nm_id: int | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    limit: int = 1000,
+):
+    q = db.query(SalesReport)
+    if cabinet_id:
+        q = q.filter(SalesReport.cabinet_id == cabinet_id)
+    if nm_id:
+        q = q.filter(SalesReport.nm_id == nm_id)
+    if date_from:
+        q = q.filter(SalesReport.rr_dt >= date_from)
+    if date_to:
+        q = q.filter(SalesReport.rr_dt <= date_to)
+    return q.order_by(SalesReport.rr_dt.desc()).limit(limit).all()

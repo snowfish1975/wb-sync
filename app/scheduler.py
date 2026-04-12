@@ -4,33 +4,28 @@ import hashlib
 import logging
 import httpx
 import json
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
-from app.wb_client import fetch_product_characteristics, fetch_stocks, fetch_orders_last_40_days, fetch_prices
-from app.crud import upsert_characteristic, upsert_stock, log_sync, upsert_order, upsert_price
+from app.wb_client import fetch_product_characteristics, fetch_stocks, fetch_orders_last_40_days, fetch_prices, fetch_sales_report
+from app.crud import upsert_characteristic, upsert_stock, log_sync, upsert_order, upsert_price, upsert_sales_report_row
 from app.database import SessionLocal
 
 logger = logging.getLogger(__name__)
+
+MOSCOW_TZ = timezone(timedelta(hours=3))
 
 # --- Telegram ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "356741753")
 
 
-# --- TOKENS + NAMES (НОВАЯ ВЕРСИЯ) ---
 def load_tokens_from_json() -> list[dict]:
-    """
-    Загружает токены и имена из WB_TOKENS_JSON
-    Ожидаемый формат: {"Имя продавца": "токен", ...}
-    """
     raw = os.getenv("WB_TOKENS_JSON", "{}")
     try:
         data = json.loads(raw)
         if not data:
             logger.warning("WB_TOKENS_JSON пуст или не задан")
             return []
-        
-        # Преобразуем в список словарей
         tokens_list = []
         for name, token in data.items():
             if token and name:
@@ -39,7 +34,6 @@ def load_tokens_from_json() -> list[dict]:
                     "token": token,
                     "cabinet_id": token_id(token)
                 })
-        
         logger.info(f"Загружено {len(tokens_list)} кабинетов из WB_TOKENS_JSON")
         return tokens_list
     except json.JSONDecodeError as e:
@@ -48,41 +42,29 @@ def load_tokens_from_json() -> list[dict]:
 
 
 def get_tokens() -> list[str]:
-    """Получение списка токенов (только для совместимости со старым кодом)"""
     tokens_data = load_tokens_from_json()
     if tokens_data:
         return [item["token"] for item in tokens_data]
-    
-    # Fallback на старый формат (для обратной совместимости)
     raw = os.getenv("WB_TOKENS", "")
     return [t.strip() for t in raw.split(",") if t.strip()]
 
 
 def get_token_mapping() -> dict[str, str]:
-    """
-    Возвращает: {cabinet_id: "Имя продавца"}
-    """
     tokens_data = load_tokens_from_json()
     mapping = {}
-    
     for item in tokens_data:
         mapping[item["cabinet_id"]] = item["name"]
-    
-    # Если нет данных из JSON, пробуем старый формат
     if not mapping:
         tokens = [t.strip() for t in os.getenv("WB_TOKENS", "").split(",") if t.strip()]
         names = [n.strip() for n in os.getenv("WB_NAMES", "").split(",") if n.strip()]
-        
         for i, token in enumerate(tokens):
             tid = token_id(token)
             name = names[i] if i < len(names) else tid[:8]
             mapping[tid] = name
-    
     return mapping
 
 
 def get_cabinets_list() -> list[dict]:
-    """Получение списка кабинетов с именами и токенами"""
     return load_tokens_from_json()
 
 
@@ -94,9 +76,7 @@ async def send_telegram_message(message: str):
     if not TELEGRAM_BOT_TOKEN:
         logger.warning("TELEGRAM_BOT_TOKEN не задан, сообщение не отправлено")
         return
-
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-
     async with httpx.AsyncClient(timeout=10) as client:
         try:
             response = await client.post(
@@ -108,14 +88,14 @@ async def send_telegram_message(message: str):
                 },
             )
             if response.status_code == 200:
-                logger.info("✅ Сообщение отправлено в Telegram")
+                logger.info("Сообщение отправлено в Telegram")
             else:
-                logger.error(f"❌ Ошибка Telegram: {response.text}")
+                logger.error(f"Ошибка Telegram: {response.text}")
         except Exception as e:
             logger.error(f"Не удалось отправить сообщение: {e}")
 
 
-# --- SYNC ONE ---
+# --- SYNC ONE (основная цепь без отчёта реализации) ---
 async def sync_one_cabinet(token: str, name: str) -> dict:
     tid = token_id(token)
     db = SessionLocal()
@@ -135,13 +115,11 @@ async def sync_one_cabinet(token: str, name: str) -> dict:
         logger.info(f"[{name}] синхронизация характеристик...")
         cards = await fetch_product_characteristics(token, nm_ids=[])
         chars_count = 0
-
         for card in cards:
             nm_id = card.get("nmID")
             if nm_id:
                 upsert_characteristic(db, tid, nm_id, card)
                 chars_count += 1
-
         db.commit()
         result["chars_count"] = chars_count
         logger.info(f"[{name}] характеристики сохранены ({chars_count})")
@@ -149,16 +127,13 @@ async def sync_one_cabinet(token: str, name: str) -> dict:
         logger.info(f"[{name}] синхронизация остатков...")
         stocks = await fetch_stocks(token)
         stocks_count = 0
-
         for item in stocks:
             upsert_stock(db, tid, item)
             stocks_count += 1
-
         db.commit()
         result["stocks_count"] = stocks_count
         logger.info(f"[{name}] остатки сохранены ({stocks_count})")
 
-        # Заказы за последние 40 дней
         logger.info(f"[{name}] синхронизация заказов...")
         orders_count = 0
         try:
@@ -166,7 +141,6 @@ async def sync_one_cabinet(token: str, name: str) -> dict:
             for order in orders:
                 upsert_order(db, tid, order)
                 orders_count += 1
-
             db.commit()
             result["orders_count"] = orders_count
             logger.info(f"[{name}] заказы сохранены ({orders_count})")
@@ -175,12 +149,9 @@ async def sync_one_cabinet(token: str, name: str) -> dict:
             logger.error(f"[{name}] ошибка при синхронизации заказов: {e}")
             result["orders_error"] = str(e)[:200]
 
-
-        # --- ЦЕНЫ ---
         logger.info(f"[{name}] синхронизация цен...")
         prices = await fetch_prices(token)
         prices_count = 0
-
         for item in prices:
             for size in item.get("sizes", []):
                 try:
@@ -188,7 +159,6 @@ async def sync_one_cabinet(token: str, name: str) -> dict:
                     prices_count += 1
                 except Exception as e:
                     logger.warning(f"[{name}] ошибка price: {e}")
-
         db.commit()
         result["prices_count"] = prices_count
         logger.info(f"[{name}] цены сохранены ({prices_count})")
@@ -198,26 +168,66 @@ async def sync_one_cabinet(token: str, name: str) -> dict:
 
     except Exception as e:
         logger.error(f"[{name}] ошибка: {e}")
-
         db.rollback()
         result["error"] = str(e)[:200]
-
         try:
             log_sync(db, tid, "error", message=str(e)[:490])
             db.commit()
         except Exception as log_err:
             logger.error(f"[{name}] не удалось записать лог: {log_err}")
-
     finally:
         db.close()
 
     return result
 
 
-# --- RUN ALL ---
+# --- SYNC SALES REPORT (отдельная цепь) ---
+async def sync_sales_report_one_cabinet(token: str, name: str) -> dict:
+    """Синхронизация отчёта реализации только за вчерашний день."""
+    tid = token_id(token)
+    db = SessionLocal()
+    result = {
+        "name": name,
+        "sales_report_count": 0,
+        "error": None,
+    }
+    try:
+        now = datetime.now(MOSCOW_TZ)
+        yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+
+        logger.info(f"[{name}] отчёт реализации за {yesterday}...")
+        rows = await fetch_sales_report(token, date_from=yesterday, date_to=yesterday)
+
+        count = 0
+        for row in rows:
+            upsert_sales_report_row(db, tid, row)
+            count += 1
+
+        db.commit()
+        result["sales_report_count"] = count
+        logger.info(f"[{name}] отчёт реализации сохранён ({count} строк)")
+
+        log_sync(db, tid, "ok_sales_report", records=count)
+        db.commit()
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"[{name}] ошибка отчёта реализации: {e}")
+        result["error"] = str(e)[:200]
+        try:
+            log_sync(db, tid, "error_sales_report", message=str(e)[:490])
+            db.commit()
+        except Exception as log_err:
+            logger.error(f"[{name}] не удалось записать лог: {log_err}")
+    finally:
+        db.close()
+
+    return result
+
+
+# --- RUN ALL (основная цепь) ---
 def run_sync_all():
     cabinets = get_cabinets_list()
-    
     if not cabinets:
         logger.warning("Нет кабинетов для синхронизации. Проверьте WB_TOKENS_JSON")
         return
@@ -226,20 +236,18 @@ def run_sync_all():
 
     async def _run():
         start_time = datetime.now()
-        
-        # Ограничиваем количество параллельных задач (3-5 кабинетов одновременно)
+
         semaphore = asyncio.Semaphore(1)
-        
+
         async def sync_with_limit(cabinet):
             async with semaphore:
                 return await sync_one_cabinet(cabinet["token"], cabinet["name"])
-        
+
         tasks = [sync_with_limit(cabinet) for cabinet in cabinets]
         results = await asyncio.gather(*tasks)
 
         duration = (datetime.now() - start_time).total_seconds()
 
-        # --- Telegram ---
         message = f"🔄 <b>Выгрузка данных WB</b>\n"
         message += f"⏱ Время: {start_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
         hours = int(duration // 3600)
@@ -272,7 +280,49 @@ def run_sync_all():
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(_run())
+    finally:
+        loop.close()
 
+
+# --- RUN SALES REPORT (отдельная цепь) ---
+def run_sales_report_sync():
+    """Отдельный запуск синхронизации отчёта реализации за вчера."""
+    cabinets = get_cabinets_list()
+    if not cabinets:
+        logger.warning("Нет кабинетов для синхронизации отчёта реализации")
+        return
+
+    logger.info(f"Запуск синхронизации отчёта реализации для {len(cabinets)} кабинетов")
+
+    async def _run():
+        start_time = datetime.now()
+
+        results = []
+        for cabinet in cabinets:
+            result = await sync_sales_report_one_cabinet(cabinet["token"], cabinet["name"])
+            results.append(result)
+
+        duration = (datetime.now() - start_time).total_seconds()
+        hours = int(duration // 3600)
+        minutes = int((duration % 3600) // 60)
+
+        message = f"📊 <b>Отчёт реализации WB (за вчера)</b>\n"
+        message += f"⏱ Время: {start_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+        message += f"⌛️ Длительность: {hours:02d}:{minutes:02d}\n\n"
+
+        for r in results:
+            if r["error"]:
+                message += f"❌ <b>{r['name']}</b>: {r['error'][:100]}\n"
+            else:
+                message += f"✅ <b>{r['name']}</b>: {r['sales_report_count']} строк\n"
+
+        await send_telegram_message(message)
+        logger.info(message)
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     try:
         loop.run_until_complete(_run())
     finally:

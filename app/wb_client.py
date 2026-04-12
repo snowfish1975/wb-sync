@@ -308,3 +308,79 @@ async def fetch_prices(token: str) -> list[dict]:
 
     logger.info(f"Цены: всего получено {len(results)} товаров")
     return results
+
+
+async def fetch_sales_report(token: str, date_from: str, date_to: str) -> list[dict[str, Any]]:
+    """
+    Отчёт о продажах по реализации.
+    Лимит: 1 запрос в минуту.
+    Пагинация через rrdid из последней строки ответа.
+    date_from, date_to — строки в формате YYYY-MM-DD.
+    """
+    headers = {"Authorization": token}
+    results = []
+    rrdid = 0
+    limit = 100000
+    max_attempts = 5
+
+    while True:
+        params = {
+            "dateFrom": date_from,
+            "dateTo": date_to,
+            "limit": limit,
+            "rrdid": rrdid,
+        }
+
+        logger.info(f"Отчёт реализации: запрос rrdid={rrdid}, dateFrom={date_from}, dateTo={date_to}")
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                async with httpx.AsyncClient(timeout=120) as client:
+                    resp = await client.get(
+                        f"{WB_STATS_BASE}/api/v5/supplier/reportDetailByPeriod",
+                        headers=headers,
+                        params=params,
+                    )
+                    # 204 — данных больше нет, это штатное завершение
+                    if resp.status_code == 204:
+                        logger.info("Отчёт реализации: получен 204, данных больше нет")
+                        return results
+
+                    resp.raise_for_status()
+                    rows = resp.json()
+                    logger.info(f"Отчёт реализации, попытка {attempt} успешна: получено {len(rows)} строк")
+                    break
+
+            except Exception as e:
+                logger.warning(f"Отчёт реализации, попытка {attempt}/{max_attempts}: {type(e).__name__}: {e}")
+                if hasattr(e, 'response') and e.response is not None:
+                    logger.warning(f"HTTP статус: {e.response.status_code}, тело: {e.response.text[:500]}")
+                if attempt == max_attempts:
+                    raise RuntimeError(f"Не удалось получить отчёт реализации: {e}")
+                # Лимит 1 запрос в минуту — ждём перед повтором
+                await asyncio.sleep(65)
+
+        if not rows:
+            logger.info("Отчёт реализации: пустой ответ, завершаем")
+            break
+
+        results.extend(rows)
+        logger.info(f"Отчёт реализации: накоплено {len(results)} строк")
+
+        if len(rows) < limit:
+            logger.info(f"Отчёт реализации: получено {len(rows)} < {limit}, последняя страница")
+            break
+
+        # Берём rrd_id последней строки для следующей страницы
+        last_rrdid = rows[-1].get("rrd_id")
+        if not last_rrdid:
+            logger.warning("Отчёт реализации: нет rrd_id в последней строке, завершаем")
+            break
+
+        rrdid = last_rrdid
+        # Соблюдаем лимит 1 запрос в минуту
+        logger.info(f"Отчёт реализации: следующая страница с rrdid={rrdid}, ждём 65 сек...")
+        await asyncio.sleep(65)
+
+    logger.info(f"Отчёт реализации: всего получено {len(results)} строк")
+    return results

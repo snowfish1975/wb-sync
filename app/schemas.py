@@ -93,3 +93,48 @@ class PriceOut(BaseModel):
     seller_name: str
 
     model_config = {"from_attributes": True}
+
+
+class SalesReportRowOut(BaseModel):
+    id: int
+    cabinet_id: str
+    seller_name: str | None = None
+    rrd_id: int | None = None
+    realizationreport_id: int | None = None
+    nm_id: int | None = None
+    srid: str | None = None
+    date_from: datetime | None = None
+    date_to: datetime | None = None
+    rr_dt: datetime | None = None
+    order_dt: datetime | None = None
+    sale_dt: datetime | None = None
+    subject_name: str | None = None
+    brand_name: str | None = None
+    sa_name: str | None = None
+    ts_name: str | None = None
+    barcode: str | None = None
+    doc_type_name: str | None = None
+    supplier_oper_name: str | None = None
+    office_name: str | None = None
+    quantity: int | None = None
+    retail_price: float | None = None
+    retail_amount: float | None = None
+    retail_price_withdisc_rub: float | None = None
+    sale_percent: int | None = None
+    commission_percent: float | None = None
+    ppvz_for_pay: float | None = None
+    ppvz_sales_commission: float | None = None
+    ppvz_vw: float | None = None
+    ppvz_vw_nds: float | None = None
+    delivery_rub: float | None = None
+    penalty: float | None = None
+    additional_payment: float | None = None
+    storage_fee: float | None = None
+    deduction: float | None = None
+    acceptance: float | None = None
+    acquiring_fee: float | None = None
+    currency_name: str | None = None
+    site_country: str | None = None
+    synced_at: datetime
+
+    model_config = {"from_attributes": True}

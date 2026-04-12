@@ -10,9 +10,9 @@ from dotenv import load_dotenv
 import json
 
 from app.database import engine, Base, get_db
-from app.schemas import ProductCharacteristicOut, SyncLogOut, TokenRequest, StockOut, OrderOut, PriceOut
-from app.crud import get_characteristics, get_sync_logs, get_stocks, get_orders, load_tokens_mapping, get_prices
-from app.scheduler import run_sync_all
+from app.schemas import ProductCharacteristicOut, SyncLogOut, TokenRequest, StockOut, OrderOut, PriceOut, SalesReportRowOut
+from app.crud import get_characteristics, get_sync_logs, get_stocks, get_orders, load_tokens_mapping, get_prices, get_sales_report
+from app.scheduler import run_sync_all, run_sales_report_sync
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -20,16 +20,13 @@ logger = logging.getLogger(__name__)
 
 scheduler = BackgroundScheduler()
 
-# -------------------------
-# Утилиты
-# -------------------------
+
 def token_id(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()[:32]
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Ждём базу — до 10 попыток с интервалом 5 секунд
     for attempt in range(1, 11):
         try:
             Base.metadata.create_all(bind=engine)
@@ -40,9 +37,20 @@ async def lifespan(app: FastAPI):
             if attempt == 10:
                 raise RuntimeError("Не удалось подключиться к БД после 10 попыток")
             await asyncio.sleep(5)
-            
+
     sync_hour = int(os.getenv("SYNC_HOUR", "3"))
     scheduler.add_job(run_sync_all, "cron", hour=sync_hour, minute=0, id="wb_sync")
+
+    # Отчёт реализации — в 10:30 МСК = 07:30 UTC
+    scheduler.add_job(
+        run_sales_report_sync,
+        "cron",
+        hour=7,
+        minute=30,
+        id="wb_sales_report_sync",
+        timezone="UTC",
+    )
+
     scheduler.start()
     yield
     scheduler.shutdown()
@@ -50,9 +58,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="WB Sync API", description="Синхронизация данных Wildberries", lifespan=lifespan)
 
-# -------------------------
-# Эндпоинты
-# -------------------------
+
 @app.get("/")
 def root():
     return {"status": "ok", "message": "WB Sync работает"}
@@ -88,24 +94,17 @@ def list_stocks(body: TokenRequest, nm_id: int | None = Query(None), db: Session
 
 @app.post("/api/orders", response_model=list[OrderOut])
 def list_orders(
-    body: TokenRequest, 
+    body: TokenRequest,
     nm_id: int | None = Query(None, description="Фильтр по артикулу WB"),
     days_back: int = Query(40, description="За сколько дней вернуть заказы (макс 90)", ge=1, le=90),
     limit: int = Query(1000, description="Максимальное количество записей", le=10000),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    """
-    Получение заказов по токену кабинета.
-    Возвращает заказы за последние N дней (по умолчанию 40).
-    """
     cid = token_id(body.token)
     mapping = load_tokens_mapping()
     data = get_orders(db, cabinet_id=cid, days_back=days_back, limit=limit)
-    
-    # Фильтрация по nm_id если указан
     if nm_id:
         data = [item for item in data if item.nm_id == nm_id]
-    
     return [
         {
             **{k: v for k, v in item.__dict__.items() if not k.startswith("_")},
@@ -123,9 +122,32 @@ def list_prices(
 ):
     cid = token_id(body.token)
     mapping = load_tokens_mapping()
-
     data = get_prices(db, cabinet_id=cid, nm_id=nm_id)
+    return [
+        {
+            **{k: v for k, v in item.__dict__.items() if not k.startswith("_")},
+            "seller_name": mapping.get(item.cabinet_id, item.cabinet_id[:8]),
+        }
+        for item in data
+    ]
 
+
+@app.post("/api/sales-report", response_model=list[SalesReportRowOut])
+def list_sales_report(
+    body: TokenRequest,
+    nm_id: int | None = Query(None, description="Фильтр по артикулу WB"),
+    date_from: str | None = Query(None, description="Дата начала YYYY-MM-DD"),
+    date_to: str | None = Query(None, description="Дата конца YYYY-MM-DD"),
+    limit: int = Query(1000, description="Максимальное количество строк", le=50000),
+    db: Session = Depends(get_db),
+):
+    """Отчёт о продажах по реализации."""
+    from datetime import datetime
+    cid = token_id(body.token)
+    mapping = load_tokens_mapping()
+    dt_from = datetime.strptime(date_from, "%Y-%m-%d") if date_from else None
+    dt_to = datetime.strptime(date_to, "%Y-%m-%d") if date_to else None
+    data = get_sales_report(db, cabinet_id=cid, nm_id=nm_id, date_from=dt_from, date_to=dt_to, limit=limit)
     return [
         {
             **{k: v for k, v in item.__dict__.items() if not k.startswith("_")},
@@ -152,6 +174,14 @@ def list_logs(db: Session = Depends(get_db)):
 def trigger_sync():
     import threading
     threading.Thread(target=run_sync_all, daemon=True).start()
+    return {"status": "started"}
+
+
+@app.post("/api/sync/trigger-sales-report")
+def trigger_sales_report_sync():
+    """Принудительный запуск синхронизации отчёта реализации за вчера."""
+    import threading
+    threading.Thread(target=run_sales_report_sync, daemon=True).start()
     return {"status": "started"}
 
 

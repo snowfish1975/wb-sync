@@ -123,3 +123,108 @@ class Price(Base):
     __table_args__ = (
         UniqueConstraint("cabinet_id", "chrt_id", name="uq_price"),
     )
+
+
+class SalesReport(Base):
+    __tablename__ = "sales_reports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    cabinet_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+
+    # Идентификаторы
+    rrd_id: Mapped[int] = mapped_column(BigInteger, nullable=True)
+    realizationreport_id: Mapped[int] = mapped_column(BigInteger, nullable=True, index=True)
+    gi_id: Mapped[int] = mapped_column(BigInteger, nullable=True)
+    nm_id: Mapped[int] = mapped_column(Integer, nullable=True, index=True)
+    shk_id: Mapped[int] = mapped_column(BigInteger, nullable=True)
+    assembly_id: Mapped[int] = mapped_column(BigInteger, nullable=True)
+    srid: Mapped[str] = mapped_column(String(100), nullable=True, index=True)
+    order_uid: Mapped[str] = mapped_column(String(100), nullable=True)
+
+    # Период отчёта
+    date_from: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    date_to: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    create_dt: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    rr_dt: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    order_dt: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    sale_dt: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+
+    # Товар
+    subject_name: Mapped[str] = mapped_column(String(200), nullable=True)
+    brand_name: Mapped[str] = mapped_column(String(200), nullable=True)
+    sa_name: Mapped[str] = mapped_column(String(200), nullable=True)
+    ts_name: Mapped[str] = mapped_column(String(50), nullable=True)
+    barcode: Mapped[str] = mapped_column(String(50), nullable=True)
+
+    # Операция
+    doc_type_name: Mapped[str] = mapped_column(String(100), nullable=True)
+    supplier_oper_name: Mapped[str] = mapped_column(String(200), nullable=True)
+    office_name: Mapped[str] = mapped_column(String(200), nullable=True)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=True)
+    currency_name: Mapped[str] = mapped_column(String(10), nullable=True)
+
+    # Цены и скидки
+    retail_price: Mapped[float] = mapped_column(Float, nullable=True)
+    retail_amount: Mapped[float] = mapped_column(Float, nullable=True)
+    retail_price_withdisc_rub: Mapped[float] = mapped_column(Float, nullable=True)
+    sale_percent: Mapped[int] = mapped_column(Integer, nullable=True)
+    commission_percent: Mapped[float] = mapped_column(Float, nullable=True)
+    product_discount_for_report: Mapped[float] = mapped_column(Float, nullable=True)
+    supplier_promo: Mapped[float] = mapped_column(Float, nullable=True)
+    ppvz_spp_prc: Mapped[float] = mapped_column(Float, nullable=True)
+
+    # Комиссии WB
+    ppvz_kvw_prc_base: Mapped[float] = mapped_column(Float, nullable=True)
+    ppvz_kvw_prc: Mapped[float] = mapped_column(Float, nullable=True)
+    ppvz_sales_commission: Mapped[float] = mapped_column(Float, nullable=True)
+    ppvz_for_pay: Mapped[float] = mapped_column(Float, nullable=True)
+    ppvz_reward: Mapped[float] = mapped_column(Float, nullable=True)
+    ppvz_vw: Mapped[float] = mapped_column(Float, nullable=True)
+    ppvz_vw_nds: Mapped[float] = mapped_column(Float, nullable=True)
+    sup_rating_prc_up: Mapped[float] = mapped_column(Float, nullable=True)
+    is_kgvp_v2: Mapped[float] = mapped_column(Float, nullable=True)
+
+    # Эквайринг
+    acquiring_fee: Mapped[float] = mapped_column(Float, nullable=True)
+    acquiring_percent: Mapped[float] = mapped_column(Float, nullable=True)
+    acquiring_bank: Mapped[str] = mapped_column(String(200), nullable=True)
+    payment_processing: Mapped[str] = mapped_column(String(100), nullable=True)
+
+    # Доставка и логистика
+    delivery_amount: Mapped[int] = mapped_column(Integer, nullable=True)
+    return_amount: Mapped[int] = mapped_column(Integer, nullable=True)
+    delivery_rub: Mapped[float] = mapped_column(Float, nullable=True)
+    gi_box_type_name: Mapped[str] = mapped_column(String(100), nullable=True)
+    rebill_logistic_cost: Mapped[float] = mapped_column(Float, nullable=True)
+    rebill_logistic_org: Mapped[str] = mapped_column(String(200), nullable=True)
+    dlv_prc: Mapped[float] = mapped_column(Float, nullable=True)
+
+    # Финансы
+    penalty: Mapped[float] = mapped_column(Float, nullable=True)
+    additional_payment: Mapped[float] = mapped_column(Float, nullable=True)
+    storage_fee: Mapped[float] = mapped_column(Float, nullable=True)
+    deduction: Mapped[float] = mapped_column(Float, nullable=True)
+    acceptance: Mapped[float] = mapped_column(Float, nullable=True)
+
+    # Прочее
+    site_country: Mapped[str] = mapped_column(String(100), nullable=True)
+    ppvz_office_name: Mapped[str] = mapped_column(String(200), nullable=True)
+    ppvz_office_id: Mapped[int] = mapped_column(Integer, nullable=True)
+    ppvz_supplier_id: Mapped[int] = mapped_column(Integer, nullable=True)
+    ppvz_supplier_name: Mapped[str] = mapped_column(String(200), nullable=True)
+    ppvz_inn: Mapped[str] = mapped_column(String(20), nullable=True)
+    sticker_id: Mapped[str] = mapped_column(String(100), nullable=True)
+    declaration_number: Mapped[str] = mapped_column(String(100), nullable=True)
+    bonus_type_name: Mapped[str] = mapped_column(String(200), nullable=True)
+    kiz: Mapped[str] = mapped_column(String(200), nullable=True)
+    srv_dbs: Mapped[bool] = mapped_column(Boolean, nullable=True)
+    is_legal_entity: Mapped[bool] = mapped_column(Boolean, nullable=True)
+    report_type: Mapped[int] = mapped_column(Integer, nullable=True)
+    fix_tariff_date_from: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    fix_tariff_date_to: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+
+    synced_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("cabinet_id", "rrd_id", name="uq_sales_report_row"),
+    )
