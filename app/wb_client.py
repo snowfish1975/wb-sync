@@ -329,6 +329,7 @@ async def fetch_sales_report(token: str, date_from: str, date_to: str) -> list[d
             "dateTo": date_to,
             "limit": limit,
             "rrdid": rrdid,
+            "period": "daily",
         }
 
         logger.info(f"Отчёт реализации: запрос rrdid={rrdid}, dateFrom={date_from}, dateTo={date_to}")
