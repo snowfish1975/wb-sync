@@ -123,7 +123,7 @@ def list_orders(
 
     return JSONResponse(content=result)
 
-@app.post("/api/sales", response_model=list[SaleOut])
+@app.post("/api/sales")
 def list_sales(
     body: TokenRequest,
     fields: str | None = Query(None, description="Поля через запятую: nm_id,date,total_price"),
@@ -135,7 +135,7 @@ def list_sales(
     """Продажи и возвраты за последние N дней."""
     cid = token_id(body.token)
     mapping = load_tokens_mapping()
-    data = get_sales(db, cabinet_id=cid, nm_id=nm_id, days_back=days_back, limit=limit, offset=offset)
+    data = get_sales(db, cabinet_id=cid, days_back=days_back, limit=limit, offset=offset)
 
     requested_fields = [f.strip() for f in fields.split(",")] if fields else None
 
