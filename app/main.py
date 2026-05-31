@@ -95,7 +95,7 @@ def list_stocks(body: TokenRequest, nm_id: int | None = Query(None), db: Session
 @app.post("/api/orders", response_model=list[OrderOut])
 def list_orders(
     body: TokenRequest,
-    nm_id: int | None = Query(None, description="Фильтр по артикулу WB"),
+    fields: str | None = Query(None, description="Поля через запятую: nm_id,date,total_price"),
     days_back: int = Query(40, description="За сколько дней вернуть заказы (макс 90)", ge=1, le=90),
     limit: int = Query(1000, description="Максимальное количество записей", le=500000),
     offset: int = Query(0, ge=0),
@@ -104,21 +104,22 @@ def list_orders(
     cid = token_id(body.token)
     mapping = load_tokens_mapping()
     data = get_orders(db, cabinet_id=cid, days_back=days_back, limit=limit, offset=offset)
-    if nm_id:
-        data = [item for item in data if item.nm_id == nm_id]
-    return [
-        {
-            **{k: v for k, v in item.__dict__.items() if not k.startswith("_")},
-            "seller_name": mapping.get(item.cabinet_id, item.cabinet_id[:8]),
-        }
-        for item in data
-    ]
+    requested_fields = [f.strip() for f in fields.split(",")] if fields else None
 
+    result = []
+    for item in data:
+        row = {k: v for k, v in item.__dict__.items() if not k.startswith("_")}
+        row["seller_name"] = mapping.get(item.cabinet_id, item.cabinet_id[:8])
+        if requested_fields:
+            row = {k: v for k, v in row.items() if k in requested_fields}
+        result.append(row)
+
+    return result
 
 @app.post("/api/sales", response_model=list[SaleOut])
 def list_sales(
     body: TokenRequest,
-    nm_id: int | None = Query(None, description="Фильтр по артикулу WB"),
+    fields: str | None = Query(None, description="Поля через запятую: nm_id,date,total_price"),
     days_back: int = Query(40, description="За сколько дней (макс 90)", ge=1, le=90),
     limit: int = Query(1000, description="Максимальное количество записей", le=500000),
     offset: int = Query(0, ge=0),
@@ -128,13 +129,17 @@ def list_sales(
     cid = token_id(body.token)
     mapping = load_tokens_mapping()
     data = get_sales(db, cabinet_id=cid, nm_id=nm_id, days_back=days_back, limit=limit, offset=offset)
-    return [
-        {
-            **{k: v for k, v in item.__dict__.items() if not k.startswith("_")},
-            "seller_name": mapping.get(item.cabinet_id, item.cabinet_id[:8]),
-        }
-        for item in data
-    ]
+    requested_fields = [f.strip() for f in fields.split(",")] if fields else None
+
+    result = []
+    for item in data:
+        row = {k: v for k, v in item.__dict__.items() if not k.startswith("_")}
+        row["seller_name"] = mapping.get(item.cabinet_id, item.cabinet_id[:8])
+        if requested_fields:
+            row = {k: v for k, v in row.items() if k in requested_fields}
+        result.append(row)
+
+    return result
 
 
 @app.post("/api/prices", response_model=list[PriceOut])
