@@ -142,6 +142,9 @@ async def sync_one_cabinet(token: str, name: str) -> dict:
             for order in orders:
                 upsert_order(db, tid, order)
                 orders_count += 1
+                if orders_count % 1000 == 0:          # ← коммит каждые 1000 записей
+                    db.commit()
+                    logger.info(f"[{name}] заказы: промежуточный коммит ({orders_count})")
             db.commit()
             result["orders_count"] = orders_count
             logger.info(f"[{name}] заказы сохранены ({orders_count})")
@@ -172,6 +175,9 @@ async def sync_one_cabinet(token: str, name: str) -> dict:
             for sale in sales:
                 upsert_sale(db, tid, sale)
                 sales_count += 1
+                if sales_count % 1000 == 0:            # ← коммит каждые 1000 записей
+                    db.commit()
+                    logger.info(f"[{name}] продажи: промежуточный коммит ({sales_count})")
             db.commit()
             result["sales_count"] = sales_count
             logger.info(f"[{name}] продажи сохранены ({sales_count})")
@@ -289,6 +295,8 @@ def run_sync_all():
                     message += f"   ⚠️ Ошибка заказов: {r['orders_error'][:80]}\n"
                 message += f"   • Цены: {r['prices_count']}\n"
                 message += f"   • Продажи: {r.get('sales_count', 0)}\n"
+                if r.get('sales_error'):
+                    message += f"   ⚠️ Ошибка продаж: {r['sales_error'][:80]}\n"
                 message += "\n"
 
         message += f"📊 <b>Итог:</b> успешно: {success_count}, ошибок: {error_count}"
