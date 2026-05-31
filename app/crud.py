@@ -5,7 +5,8 @@ from datetime import datetime, timedelta
 import os
 import hashlib
 import json
-
+import logging
+logger = logging.getLogger(__name__)
 
 # -------------------------
 # Загрузка токенов и имён
@@ -77,8 +78,14 @@ def upsert_orders_bulk(db: Session, cabinet_id: str, orders: list[dict], chunk_s
         except Exception:
             return None
 
+    total = len(orders)
+    total_chunks = (total + chunk_size - 1) // chunk_size
+    logger.info(f"upsert_orders_bulk: начало, всего {total} записей, {total_chunks} чанков")
+
     for i in range(0, len(orders), chunk_size):
         chunk = orders[i:i + chunk_size]
+        chunk_num = i // chunk_size + 1
+        logger.info(f"upsert_orders_bulk: чанк {chunk_num}/{total_chunks} ({len(chunk)} записей)...")
         values = [
             {
                 "cabinet_id": cabinet_id,
@@ -125,7 +132,8 @@ def upsert_orders_bulk(db: Session, cabinet_id: str, orders: list[dict], chunk_s
         )
         db.execute(stmt)
         db.commit()
-
+        logger.info(f"upsert_orders_bulk: чанк {chunk_num}/{total_chunks} сохранён")
+    logger.info(f"upsert_orders_bulk: завершено")
 
 def log_sync(db: Session, cabinet_id: str, status: str, message: str | None = None, records: int = 0):
     entry = SyncLog(
