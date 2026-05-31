@@ -67,60 +67,64 @@ def upsert_stock(db: Session, cabinet_id: str, item: dict):
     db.execute(stmt)
 
 
-def upsert_order(db: Session, cabinet_id: str, order_data: dict):
-    """Сохранение или обновление заказа"""
-    
-    # Парсинг дат (они приходят в московском времени UTC+3)
-    def parse_date(date_str: str) -> datetime | None:
+def upsert_orders_bulk(db: Session, cabinet_id: str, orders: list[dict], chunk_size: int = 1000):
+    """Пакетная вставка заказов — намного быстрее построчной."""
+    def parse_date(date_str):
         if not date_str or date_str == "0001-01-01T00:00:00":
             return None
         try:
-            # Дата приходит в формате "2024-01-15T10:30:00"
-            return datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S")
-        except:
+            return datetime.strptime(date_str[:19], "%Y-%m-%dT%H:%M:%S")
+        except Exception:
             return None
-    
-    stmt = pg_insert(Order).values(
-        cabinet_id=cabinet_id,
-        srid=order_data.get("srid"),
-        g_number=order_data.get("gNumber"),
-        nm_id=order_data.get("nmId"),
-        supplier_article=order_data.get("supplierArticle"),
-        barcode=order_data.get("barcode"),
-        date=parse_date(order_data.get("date")),
-        last_change_date=parse_date(order_data.get("lastChangeDate")),
-        cancel_date=parse_date(order_data.get("cancelDate")),
-        total_price=order_data.get("totalPrice"),
-        finished_price=order_data.get("finishedPrice"),
-        price_with_disc=order_data.get("priceWithDisc"),
-        discount_percent=order_data.get("discountPercent"),
-        spp=order_data.get("spp"),
-        is_cancel=order_data.get("isCancel", False),
-        is_supply=order_data.get("isSupply", False),
-        is_realization=order_data.get("isRealization", False),
-        warehouse_name=order_data.get("warehouseName"),
-        warehouse_type=order_data.get("warehouseType"),
-        country_name=order_data.get("countryName"),
-        region_name=order_data.get("regionName"),
-        category=order_data.get("category"),
-        subject=order_data.get("subject"),
-        brand=order_data.get("brand"),
-        tech_size=order_data.get("techSize"),
-        sticker=order_data.get("sticker"),
-        income_id=order_data.get("incomeID"),
-        synced_at=datetime.utcnow(),
-    ).on_conflict_do_update(
-        constraint="uq_cabinet_order",
-        set_={
-            "last_change_date": parse_date(order_data.get("lastChangeDate")),
-            "cancel_date": parse_date(order_data.get("cancelDate")),
-            "finished_price": order_data.get("finishedPrice"),
-            "price_with_disc": order_data.get("priceWithDisc"),
-            "is_cancel": order_data.get("isCancel", False),
-            "synced_at": datetime.utcnow(),
-        },
-    )
-    db.execute(stmt)
+
+    for i in range(0, len(orders), chunk_size):
+        chunk = orders[i:i + chunk_size]
+        values = [
+            {
+                "cabinet_id": cabinet_id,
+                "srid": o.get("srid"),
+                "g_number": o.get("gNumber"),
+                "nm_id": o.get("nmId"),
+                "supplier_article": o.get("supplierArticle"),
+                "barcode": o.get("barcode"),
+                "date": parse_date(o.get("date")),
+                "last_change_date": parse_date(o.get("lastChangeDate")),
+                "cancel_date": parse_date(o.get("cancelDate")),
+                "total_price": o.get("totalPrice"),
+                "finished_price": o.get("finishedPrice"),
+                "price_with_disc": o.get("priceWithDisc"),
+                "discount_percent": o.get("discountPercent"),
+                "spp": o.get("spp"),
+                "is_cancel": o.get("isCancel", False),
+                "is_supply": o.get("isSupply", False),
+                "is_realization": o.get("isRealization", False),
+                "warehouse_name": o.get("warehouseName"),
+                "warehouse_type": o.get("warehouseType"),
+                "country_name": o.get("countryName"),
+                "region_name": o.get("regionName"),
+                "category": o.get("category"),
+                "subject": o.get("subject"),
+                "brand": o.get("brand"),
+                "tech_size": o.get("techSize"),
+                "sticker": o.get("sticker"),
+                "income_id": o.get("incomeID"),
+                "synced_at": datetime.utcnow(),
+            }
+            for o in chunk
+        ]
+        stmt = pg_insert(Order).values(values).on_conflict_do_update(
+            constraint="uq_cabinet_order",
+            set_={
+                "last_change_date": pg_insert(Order).excluded.last_change_date,
+                "cancel_date": pg_insert(Order).excluded.cancel_date,
+                "finished_price": pg_insert(Order).excluded.finished_price,
+                "price_with_disc": pg_insert(Order).excluded.price_with_disc,
+                "is_cancel": pg_insert(Order).excluded.is_cancel,
+                "synced_at": pg_insert(Order).excluded.synced_at,
+            },
+        )
+        db.execute(stmt)
+        db.commit()
 
 
 def log_sync(db: Session, cabinet_id: str, status: str, message: str | None = None, records: int = 0):
@@ -328,8 +332,9 @@ def get_sales_report(
     return q.order_by(SalesReport.rr_dt.desc()).limit(limit).all()
 
 
-def upsert_sale(db: Session, cabinet_id: str, sale_data: dict):
-    def parse_date(date_str: str) -> datetime | None:
+def upsert_sales_bulk(db: Session, cabinet_id: str, sales: list[dict], chunk_size: int = 1000):
+    """Пакетная вставка продаж."""
+    def parse_date(date_str):
         if not date_str or date_str == "0001-01-01T00:00:00":
             return None
         try:
@@ -337,47 +342,54 @@ def upsert_sale(db: Session, cabinet_id: str, sale_data: dict):
         except Exception:
             return None
 
-    stmt = pg_insert(Sale).values(
-        cabinet_id=cabinet_id,
-        srid=sale_data.get("srid"),
-        sale_id=sale_data.get("saleID"),
-        g_number=sale_data.get("gNumber"),
-        nm_id=sale_data.get("nmId"),
-        supplier_article=sale_data.get("supplierArticle"),
-        barcode=sale_data.get("barcode"),
-        date=parse_date(sale_data.get("date")),
-        last_change_date=parse_date(sale_data.get("lastChangeDate")),
-        total_price=sale_data.get("totalPrice"),
-        finished_price=sale_data.get("finishedPrice"),
-        price_with_disc=sale_data.get("priceWithDisc"),
-        discount_percent=sale_data.get("discountPercent"),
-        spp=sale_data.get("spp"),
-        for_pay=sale_data.get("forPay"),
-        payment_sale_amount=sale_data.get("paymentSaleAmount"),
-        is_supply=sale_data.get("isSupply", False),
-        is_realization=sale_data.get("isRealization", False),
-        warehouse_name=sale_data.get("warehouseName"),
-        warehouse_type=sale_data.get("warehouseType"),
-        country_name=sale_data.get("countryName"),
-        oblast_okrug_name=sale_data.get("oblastOkrugName"),
-        region_name=sale_data.get("regionName"),
-        category=sale_data.get("category"),
-        subject=sale_data.get("subject"),
-        brand=sale_data.get("brand"),
-        tech_size=sale_data.get("techSize"),
-        sticker=sale_data.get("sticker"),
-        income_id=sale_data.get("incomeID"),
-        synced_at=datetime.utcnow(),
-    ).on_conflict_do_update(
-        constraint="uq_cabinet_sale",
-        set_={
-            "last_change_date": parse_date(sale_data.get("lastChangeDate")),
-            "for_pay": sale_data.get("forPay"),
-            "finished_price": sale_data.get("finishedPrice"),
-            "synced_at": datetime.utcnow(),
-        },
-    )
-    db.execute(stmt)
+    for i in range(0, len(sales), chunk_size):
+        chunk = sales[i:i + chunk_size]
+        values = [
+            {
+                "cabinet_id": cabinet_id,
+                "srid": s.get("srid"),
+                "sale_id": s.get("saleID"),
+                "g_number": s.get("gNumber"),
+                "nm_id": s.get("nmId"),
+                "supplier_article": s.get("supplierArticle"),
+                "barcode": s.get("barcode"),
+                "date": parse_date(s.get("date")),
+                "last_change_date": parse_date(s.get("lastChangeDate")),
+                "total_price": s.get("totalPrice"),
+                "finished_price": s.get("finishedPrice"),
+                "price_with_disc": s.get("priceWithDisc"),
+                "discount_percent": s.get("discountPercent"),
+                "spp": s.get("spp"),
+                "for_pay": s.get("forPay"),
+                "payment_sale_amount": s.get("paymentSaleAmount"),
+                "is_supply": s.get("isSupply", False),
+                "is_realization": s.get("isRealization", False),
+                "warehouse_name": s.get("warehouseName"),
+                "warehouse_type": s.get("warehouseType"),
+                "country_name": s.get("countryName"),
+                "oblast_okrug_name": s.get("oblastOkrugName"),
+                "region_name": s.get("regionName"),
+                "category": s.get("category"),
+                "subject": s.get("subject"),
+                "brand": s.get("brand"),
+                "tech_size": s.get("techSize"),
+                "sticker": s.get("sticker"),
+                "income_id": s.get("incomeID"),
+                "synced_at": datetime.utcnow(),
+            }
+            for s in chunk
+        ]
+        stmt = pg_insert(Sale).values(values).on_conflict_do_update(
+            constraint="uq_cabinet_sale",
+            set_={
+                "last_change_date": pg_insert(Sale).excluded.last_change_date,
+                "for_pay": pg_insert(Sale).excluded.for_pay,
+                "finished_price": pg_insert(Sale).excluded.finished_price,
+                "synced_at": pg_insert(Sale).excluded.synced_at,
+            },
+        )
+        db.execute(stmt)
+        db.commit()
 
 
 def get_sales(

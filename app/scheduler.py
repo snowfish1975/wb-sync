@@ -7,7 +7,7 @@ import json
 from datetime import datetime, timedelta, timezone
 
 from app.wb_client import fetch_product_characteristics, fetch_stocks, fetch_orders_last_40_days, fetch_prices, fetch_sales_report, fetch_sales
-from app.crud import upsert_characteristic, upsert_stock, log_sync, upsert_order, upsert_price, upsert_sales_report_row, upsert_sale
+from app.crud import upsert_characteristic, upsert_stock, log_sync, upsert_price, upsert_sales_report_row, upsert_orders_bulk, upsert_sales_bulk
 from app.database import SessionLocal
 
 logger = logging.getLogger(__name__)
@@ -139,13 +139,8 @@ async def sync_one_cabinet(token: str, name: str) -> dict:
         orders_count = 0
         try:
             orders = await fetch_orders_last_40_days(token)
-            for order in orders:
-                upsert_order(db, tid, order)
-                orders_count += 1
-                if orders_count % 1000 == 0:          # ← коммит каждые 1000 записей
-                    db.commit()
-                    logger.info(f"[{name}] заказы: промежуточный коммит ({orders_count})")
-            db.commit()
+            upsert_orders_bulk(db, tid, orders)
+            orders_count = len(orders)
             result["orders_count"] = orders_count
             logger.info(f"[{name}] заказы сохранены ({orders_count})")
         except Exception as e:
@@ -172,13 +167,8 @@ async def sync_one_cabinet(token: str, name: str) -> dict:
         sales_count = 0
         try:
             sales = await fetch_sales(token)
-            for sale in sales:
-                upsert_sale(db, tid, sale)
-                sales_count += 1
-                if sales_count % 1000 == 0:            # ← коммит каждые 1000 записей
-                    db.commit()
-                    logger.info(f"[{name}] продажи: промежуточный коммит ({sales_count})")
-            db.commit()
+            upsert_sales_bulk(db, tid, sales)
+            sales_count = len(sales)
             result["sales_count"] = sales_count
             logger.info(f"[{name}] продажи сохранены ({sales_count})")
         except Exception as e:
