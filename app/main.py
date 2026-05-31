@@ -105,7 +105,7 @@ def list_orders(
 ):
     cid = token_id(body.token)
     mapping = load_tokens_mapping()
-    data = get_orders(db, cabinet_id=cid, days_back=days_back, limit=limit, offset=offset)
+    data = get_orders(db, cabinet_id=cid, days_back=days_back, limit=limit, offset=offset, fields=fields)
 
     requested_fields = [f.strip() for f in fields.split(",")] if fields else None
 
@@ -135,7 +135,7 @@ def list_sales(
     """Продажи и возвраты за последние N дней."""
     cid = token_id(body.token)
     mapping = load_tokens_mapping()
-    data = get_sales(db, cabinet_id=cid, days_back=days_back, limit=limit, offset=offset)
+    data = get_sales(db, cabinet_id=cid, days_back=days_back, limit=limit, offset=offset, fields=fields)
 
     requested_fields = [f.strip() for f in fields.split(",")] if fields else None
 

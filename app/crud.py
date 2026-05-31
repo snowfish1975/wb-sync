@@ -7,6 +7,7 @@ import hashlib
 import json
 import logging
 logger = logging.getLogger(__name__)
+from sqlalchemy.orm import load_only
 
 # -------------------------
 # Загрузка токенов и имён
@@ -163,10 +164,16 @@ def get_stocks(db: Session, cabinet_id: str | None = None, nm_id: int | None = N
     return q.order_by(Stock.synced_at.desc()).limit(10000).all()
 
 
-def get_orders(db: Session, cabinet_id: str | None = None, days_back: int = 40, limit: int = 1000, offset: int = 0):
+def get_orders(db: Session, cabinet_id: str | None = None, days_back: int = 40, limit: int = 1000, offset: int = 0, fields=None):
     """Получение заказов из БД за последние N дней"""
     q = db.query(Order)
-    
+
+    if fields:
+        # загружаем только запрошенные поля + cabinet_id для маппинга
+        cols = [getattr(Order, f) for f in fields if hasattr(Order, f)]
+        if cols:
+            q = q.options(load_only(*cols, Order.cabinet_id))
+
     if cabinet_id:
         q = q.filter(Order.cabinet_id == cabinet_id)
     
@@ -406,13 +413,22 @@ def get_sales(
     nm_id: int | None = None,
     days_back: int = 40,
     limit: int = 1000,
-    offset: int = 0
+    offset: int = 0,
+    fields=None
 ):
     q = db.query(Sale)
+
+    if fields:
+        # загружаем только запрошенные поля + cabinet_id для маппинга
+        cols = [getattr(Order, f) for f in fields if hasattr(Order, f)]
+        if cols:
+            q = q.options(load_only(*cols, Order.cabinet_id))
+
     if cabinet_id:
         q = q.filter(Sale.cabinet_id == cabinet_id)
     if nm_id:
         q = q.filter(Sale.nm_id == nm_id)
+
     threshold = datetime.now() - timedelta(days=days_back)
     q = q.filter(Sale.date >= threshold)
     return q.order_by(Sale.date.desc()).offset(offset).limit(limit).all()
