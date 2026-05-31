@@ -14,6 +14,8 @@ from app.schemas import ProductCharacteristicOut, SyncLogOut, TokenRequest, Stoc
 from app.crud import get_characteristics, get_sync_logs, get_stocks, get_orders, load_tokens_mapping, get_prices, get_sales_report, get_sales
 from app.scheduler import run_sync_all, run_sales_report_sync
 
+from fastapi.responses import JSONResponse
+
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -104,17 +106,22 @@ def list_orders(
     cid = token_id(body.token)
     mapping = load_tokens_mapping()
     data = get_orders(db, cabinet_id=cid, days_back=days_back, limit=limit, offset=offset)
+
     requested_fields = [f.strip() for f in fields.split(",")] if fields else None
 
     result = []
     for item in data:
         row = {k: v for k, v in item.__dict__.items() if not k.startswith("_")}
         row["seller_name"] = mapping.get(item.cabinet_id, item.cabinet_id[:8])
+        # datetime не сериализуется в JSON напрямую — конвертируем в строку
+        for k, v in row.items():
+            if hasattr(v, "isoformat"):
+                row[k] = v.isoformat()
         if requested_fields:
             row = {k: v for k, v in row.items() if k in requested_fields}
         result.append(row)
 
-    return result
+    return JSONResponse(content=result)
 
 @app.post("/api/sales", response_model=list[SaleOut])
 def list_sales(
@@ -129,18 +136,21 @@ def list_sales(
     cid = token_id(body.token)
     mapping = load_tokens_mapping()
     data = get_sales(db, cabinet_id=cid, nm_id=nm_id, days_back=days_back, limit=limit, offset=offset)
+
     requested_fields = [f.strip() for f in fields.split(",")] if fields else None
 
     result = []
     for item in data:
         row = {k: v for k, v in item.__dict__.items() if not k.startswith("_")}
         row["seller_name"] = mapping.get(item.cabinet_id, item.cabinet_id[:8])
+        for k, v in row.items():
+            if hasattr(v, "isoformat"):
+                row[k] = v.isoformat()
         if requested_fields:
             row = {k: v for k, v in row.items() if k in requested_fields}
         result.append(row)
 
-    return result
-
+    return JSONResponse(content=result)
 
 @app.post("/api/prices", response_model=list[PriceOut])
 def list_prices(
