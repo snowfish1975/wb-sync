@@ -141,6 +141,7 @@ async def sync_one_cabinet(token: str, name: str) -> dict:
             orders = await fetch_orders_last_40_days(token)
             upsert_orders_bulk(db, tid, orders)
             orders_count = len(orders)
+            orders.clear()
             result["orders_count"] = orders_count
             logger.info(f"[{name}] заказы сохранены ({orders_count})")
         except Exception as e:
@@ -169,6 +170,7 @@ async def sync_one_cabinet(token: str, name: str) -> dict:
             sales = await fetch_sales(token)
             upsert_sales_bulk(db, tid, sales)
             sales_count = len(sales)
+            sales.clear()
             result["sales_count"] = sales_count
             logger.info(f"[{name}] продажи сохранены ({sales_count})")
         except Exception as e:
