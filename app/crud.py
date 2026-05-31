@@ -68,7 +68,7 @@ def upsert_stock(db: Session, cabinet_id: str, item: dict):
     db.execute(stmt)
 
 
-def upsert_orders_bulk(db: Session, cabinet_id: str, orders: list[dict], chunk_size: int = 1000):
+def upsert_orders_bulk(db: Session, cabinet_id: str, orders: list[dict], chunk_size: int = 5000):
     """Пакетная вставка заказов — намного быстрее построчной."""
     def parse_date(date_str):
         if not date_str or date_str == "0001-01-01T00:00:00":
@@ -340,7 +340,7 @@ def get_sales_report(
     return q.order_by(SalesReport.rr_dt.desc()).limit(limit).all()
 
 
-def upsert_sales_bulk(db: Session, cabinet_id: str, sales: list[dict], chunk_size: int = 1000):
+def upsert_sales_bulk(db: Session, cabinet_id: str, sales: list[dict], chunk_size: int = 5000):
     """Пакетная вставка продаж."""
     def parse_date(date_str):
         if not date_str or date_str == "0001-01-01T00:00:00":

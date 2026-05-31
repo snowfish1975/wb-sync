@@ -97,7 +97,7 @@ def list_orders(
     body: TokenRequest,
     nm_id: int | None = Query(None, description="Фильтр по артикулу WB"),
     days_back: int = Query(40, description="За сколько дней вернуть заказы (макс 90)", ge=1, le=90),
-    limit: int = Query(1000, description="Максимальное количество записей", le=10000),
+    limit: int = Query(1000, description="Максимальное количество записей", le=500000),
     db: Session = Depends(get_db),
 ):
     cid = token_id(body.token)
@@ -119,7 +119,7 @@ def list_sales(
     body: TokenRequest,
     nm_id: int | None = Query(None, description="Фильтр по артикулу WB"),
     days_back: int = Query(40, description="За сколько дней (макс 90)", ge=1, le=90),
-    limit: int = Query(1000, description="Максимальное количество записей", le=10000),
+    limit: int = Query(1000, description="Максимальное количество записей", le=500000),
     db: Session = Depends(get_db),
 ):
     """Продажи и возвраты за последние N дней."""
@@ -159,7 +159,7 @@ def list_sales_report(
     nm_id: int | None = Query(None, description="Фильтр по артикулу WB"),
     date_from: str | None = Query(None, description="Дата начала YYYY-MM-DD"),
     date_to: str | None = Query(None, description="Дата конца YYYY-MM-DD"),
-    limit: int = Query(1000, description="Максимальное количество строк", le=50000),
+    limit: int = Query(1000, description="Максимальное количество строк", le=500000),
     db: Session = Depends(get_db),
 ):
     """Отчёт о продажах по реализации."""
