@@ -10,8 +10,8 @@ from dotenv import load_dotenv
 import json
 
 from app.database import engine, Base, get_db
-from app.schemas import ProductCharacteristicOut, SyncLogOut, TokenRequest, StockOut, OrderOut, PriceOut, SalesReportRowOut
-from app.crud import get_characteristics, get_sync_logs, get_stocks, get_orders, load_tokens_mapping, get_prices, get_sales_report
+from app.schemas import ProductCharacteristicOut, SyncLogOut, TokenRequest, StockOut, OrderOut, PriceOut, SalesReportRowOut, SaleOut
+from app.crud import get_characteristics, get_sync_logs, get_stocks, get_orders, load_tokens_mapping, get_prices, get_sales_report, get_sales
 from app.scheduler import run_sync_all, run_sales_report_sync
 
 load_dotenv()
@@ -105,6 +105,27 @@ def list_orders(
     data = get_orders(db, cabinet_id=cid, days_back=days_back, limit=limit)
     if nm_id:
         data = [item for item in data if item.nm_id == nm_id]
+    return [
+        {
+            **{k: v for k, v in item.__dict__.items() if not k.startswith("_")},
+            "seller_name": mapping.get(item.cabinet_id, item.cabinet_id[:8]),
+        }
+        for item in data
+    ]
+
+
+@app.post("/api/sales", response_model=list[SaleOut])
+def list_sales(
+    body: TokenRequest,
+    nm_id: int | None = Query(None, description="Фильтр по артикулу WB"),
+    days_back: int = Query(40, description="За сколько дней (макс 90)", ge=1, le=90),
+    limit: int = Query(1000, description="Максимальное количество записей", le=10000),
+    db: Session = Depends(get_db),
+):
+    """Продажи и возвраты за последние N дней."""
+    cid = token_id(body.token)
+    mapping = load_tokens_mapping()
+    data = get_sales(db, cabinet_id=cid, nm_id=nm_id, days_back=days_back, limit=limit)
     return [
         {
             **{k: v for k, v in item.__dict__.items() if not k.startswith("_")},

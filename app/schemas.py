@@ -138,3 +138,40 @@ class SalesReportRowOut(BaseModel):
     synced_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class SaleOut(BaseModel):
+    id: int
+    cabinet_id: str
+    seller_name: str | None = None
+    srid: str | None = None
+    sale_id: str | None = None
+    g_number: str | None = None
+    nm_id: int | None = None
+    supplier_article: str | None = None
+    barcode: str | None = None
+    date: datetime | None = None
+    last_change_date: datetime | None = None
+    total_price: float | None = None
+    finished_price: float | None = None
+    price_with_disc: float | None = None
+    discount_percent: int | None = None
+    spp: float | None = None
+    for_pay: float | None = None
+    payment_sale_amount: float | None = None
+    is_supply: bool = False
+    is_realization: bool = False
+    warehouse_name: str | None = None
+    warehouse_type: str | None = None
+    country_name: str | None = None
+    oblast_okrug_name: str | None = None
+    region_name: str | None = None
+    category: str | None = None
+    subject: str | None = None
+    brand: str | None = None
+    tech_size: str | None = None
+    sticker: str | None = None
+    income_id: int | None = None
+    synced_at: datetime
+
+    model_config = {"from_attributes": True}

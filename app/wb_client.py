@@ -385,3 +385,71 @@ async def fetch_sales_report(token: str, date_from: str, date_to: str) -> list[d
 
     logger.info(f"Отчёт реализации: всего получено {len(results)} строк")
     return results
+
+
+async def fetch_sales(token: str, date_from: datetime | None = None) -> list[dict[str, Any]]:
+    """
+    Продажи и возвраты.
+    Лимит: 1 запрос в минуту.
+    Пагинация: через lastChangeDate из последней строки, лимит 80000 строк.
+    Хранение данных: не более 90 дней.
+    """
+    headers = {"Authorization": token}
+
+    if date_from is None:
+        now_moscow = datetime.now(MOSCOW_TZ)
+        date_from = now_moscow - timedelta(days=40)
+
+    current_date_from = date_from.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    results = []
+    max_attempts = 5
+    retry_delay = 65  # лимит 1 запрос в минуту
+
+    while True:
+        logger.info(f"Продажи: запрос с dateFrom={current_date_from}")
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                async with httpx.AsyncClient(timeout=60) as client:
+                    resp = await client.get(
+                        f"{WB_STATS_BASE}/api/v1/supplier/sales",
+                        headers=headers,
+                        params={
+                            "dateFrom": current_date_from,
+                            "flag": 0,
+                        },
+                    )
+                    resp.raise_for_status()
+                    sales = resp.json()
+                    logger.info(f"Продажи, попытка {attempt} успешна: получено {len(sales)} записей")
+                    break
+            except Exception as e:
+                logger.warning(f"Продажи, попытка {attempt}/{max_attempts}: {type(e).__name__}: {e}")
+                if hasattr(e, 'response') and e.response is not None:
+                    logger.warning(f"HTTP статус: {e.response.status_code}, тело: {e.response.text[:500]}")
+                if attempt == max_attempts:
+                    raise RuntimeError(f"Не удалось получить продажи после {max_attempts} попыток: {e}")
+                await asyncio.sleep(retry_delay)
+
+        if not sales:
+            logger.info("Продажи: получен пустой массив, завершаем")
+            break
+
+        results.extend(sales)
+        logger.info(f"Продажи: накоплено {len(results)} записей")
+
+        if len(sales) < 80000:
+            logger.info(f"Продажи: получено {len(sales)} < 80000, последняя страница")
+            break
+
+        last_date = sales[-1].get("lastChangeDate")
+        if not last_date:
+            logger.warning("Продажи: нет lastChangeDate в последней строке, завершаем")
+            break
+
+        current_date_from = last_date
+        logger.info(f"Продажи: следующая страница с dateFrom={current_date_from}, ждём 65 сек...")
+        await asyncio.sleep(retry_delay)
+
+    logger.info(f"Продажи: всего получено {len(results)} записей")
+    return results

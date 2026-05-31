@@ -6,8 +6,8 @@ import httpx
 import json
 from datetime import datetime, timedelta, timezone
 
-from app.wb_client import fetch_product_characteristics, fetch_stocks, fetch_orders_last_40_days, fetch_prices, fetch_sales_report
-from app.crud import upsert_characteristic, upsert_stock, log_sync, upsert_order, upsert_price, upsert_sales_report_row
+from app.wb_client import fetch_product_characteristics, fetch_stocks, fetch_orders_last_40_days, fetch_prices, fetch_sales_report, fetch_sales
+from app.crud import upsert_characteristic, upsert_stock, log_sync, upsert_order, upsert_price, upsert_sales_report_row, upsert_sale
 from app.database import SessionLocal
 
 logger = logging.getLogger(__name__)
@@ -107,6 +107,7 @@ async def sync_one_cabinet(token: str, name: str) -> dict:
         "stocks_count": 0,
         "orders_count": 0,
         "prices_count": 0,
+        "sales_count": 0,
         "orders_error": None,
         "error": None,
     }
@@ -163,7 +164,23 @@ async def sync_one_cabinet(token: str, name: str) -> dict:
         result["prices_count"] = prices_count
         logger.info(f"[{name}] цены сохранены ({prices_count})")
 
-        log_sync(db, tid, "ok", records=chars_count + stocks_count + orders_count + prices_count)
+        # --- ПРОДАЖИ ---
+        logger.info(f"[{name}] синхронизация продаж...")
+        sales_count = 0
+        try:
+            sales = await fetch_sales(token)
+            for sale in sales:
+                upsert_sale(db, tid, sale)
+                sales_count += 1
+            db.commit()
+            result["sales_count"] = sales_count
+            logger.info(f"[{name}] продажи сохранены ({sales_count})")
+        except Exception as e:
+            db.rollback()
+            logger.error(f"[{name}] ошибка при синхронизации продаж: {e}")
+            result["sales_error"] = str(e)[:200]
+
+        log_sync(db, tid, "ok", records=chars_count + stocks_count + orders_count + prices_count + sales_count)
         db.commit()
 
     except Exception as e:
@@ -271,6 +288,7 @@ def run_sync_all():
                 if r.get('orders_error'):
                     message += f"   ⚠️ Ошибка заказов: {r['orders_error'][:80]}\n"
                 message += f"   • Цены: {r['prices_count']}\n"
+                message += f"   • Продажи: {r.get('sales_count', 0)}\n"
                 message += "\n"
 
         message += f"📊 <b>Итог:</b> успешно: {success_count}, ошибок: {error_count}"

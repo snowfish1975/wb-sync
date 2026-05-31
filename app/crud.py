@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from app.models import ProductCharacteristic, SyncLog, Stock, Order, Price, SalesReport
+from app.models import ProductCharacteristic, SyncLog, Stock, Order, Price, SalesReport, Sale
 from datetime import datetime, timedelta
 import os
 import hashlib
@@ -326,3 +326,72 @@ def get_sales_report(
     if date_to:
         q = q.filter(SalesReport.rr_dt <= date_to)
     return q.order_by(SalesReport.rr_dt.desc()).limit(limit).all()
+
+
+def upsert_sale(db: Session, cabinet_id: str, sale_data: dict):
+    def parse_date(date_str: str) -> datetime | None:
+        if not date_str or date_str == "0001-01-01T00:00:00":
+            return None
+        try:
+            return datetime.strptime(date_str[:19], "%Y-%m-%dT%H:%M:%S")
+        except Exception:
+            return None
+
+    stmt = pg_insert(Sale).values(
+        cabinet_id=cabinet_id,
+        srid=sale_data.get("srid"),
+        sale_id=sale_data.get("saleID"),
+        g_number=sale_data.get("gNumber"),
+        nm_id=sale_data.get("nmId"),
+        supplier_article=sale_data.get("supplierArticle"),
+        barcode=sale_data.get("barcode"),
+        date=parse_date(sale_data.get("date")),
+        last_change_date=parse_date(sale_data.get("lastChangeDate")),
+        total_price=sale_data.get("totalPrice"),
+        finished_price=sale_data.get("finishedPrice"),
+        price_with_disc=sale_data.get("priceWithDisc"),
+        discount_percent=sale_data.get("discountPercent"),
+        spp=sale_data.get("spp"),
+        for_pay=sale_data.get("forPay"),
+        payment_sale_amount=sale_data.get("paymentSaleAmount"),
+        is_supply=sale_data.get("isSupply", False),
+        is_realization=sale_data.get("isRealization", False),
+        warehouse_name=sale_data.get("warehouseName"),
+        warehouse_type=sale_data.get("warehouseType"),
+        country_name=sale_data.get("countryName"),
+        oblast_okrug_name=sale_data.get("oblastOkrugName"),
+        region_name=sale_data.get("regionName"),
+        category=sale_data.get("category"),
+        subject=sale_data.get("subject"),
+        brand=sale_data.get("brand"),
+        tech_size=sale_data.get("techSize"),
+        sticker=sale_data.get("sticker"),
+        income_id=sale_data.get("incomeID"),
+        synced_at=datetime.utcnow(),
+    ).on_conflict_do_update(
+        constraint="uq_cabinet_sale",
+        set_={
+            "last_change_date": parse_date(sale_data.get("lastChangeDate")),
+            "for_pay": sale_data.get("forPay"),
+            "finished_price": sale_data.get("finishedPrice"),
+            "synced_at": datetime.utcnow(),
+        },
+    )
+    db.execute(stmt)
+
+
+def get_sales(
+    db: Session,
+    cabinet_id: str | None = None,
+    nm_id: int | None = None,
+    days_back: int = 40,
+    limit: int = 1000,
+):
+    q = db.query(Sale)
+    if cabinet_id:
+        q = q.filter(Sale.cabinet_id == cabinet_id)
+    if nm_id:
+        q = q.filter(Sale.nm_id == nm_id)
+    threshold = datetime.now() - timedelta(days=days_back)
+    q = q.filter(Sale.date >= threshold)
+    return q.order_by(Sale.date.desc()).limit(limit).all()

@@ -228,3 +228,49 @@ class SalesReport(Base):
     __table_args__ = (
         UniqueConstraint("cabinet_id", "rrd_id", name="uq_sales_report_row"),
     )
+
+
+class Sale(Base):
+    __tablename__ = "sales"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    cabinet_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+
+    srid: Mapped[str] = mapped_column(String(100), nullable=True, index=True)
+    sale_id: Mapped[str] = mapped_column(String(50), nullable=True, index=True)  # saleID, напр. S9993700024
+    g_number: Mapped[str] = mapped_column(String(50), nullable=True, index=True)
+    nm_id: Mapped[int] = mapped_column(Integer, nullable=True, index=True)
+    supplier_article: Mapped[str] = mapped_column(String(75), nullable=True)
+    barcode: Mapped[str] = mapped_column(String(30), nullable=True)
+
+    date: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    last_change_date: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+
+    total_price: Mapped[float] = mapped_column(Float, nullable=True)
+    finished_price: Mapped[float] = mapped_column(Float, nullable=True)
+    price_with_disc: Mapped[float] = mapped_column(Float, nullable=True)
+    discount_percent: Mapped[int] = mapped_column(Integer, nullable=True)
+    spp: Mapped[float] = mapped_column(Float, nullable=True)
+    for_pay: Mapped[float] = mapped_column(Float, nullable=True)         # к перечислению продавцу
+    payment_sale_amount: Mapped[float] = mapped_column(Float, nullable=True)  # оплата частями
+
+    is_supply: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_realization: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    warehouse_name: Mapped[str] = mapped_column(String(100), nullable=True)
+    warehouse_type: Mapped[str] = mapped_column(String(50), nullable=True)
+    country_name: Mapped[str] = mapped_column(String(200), nullable=True)
+    oblast_okrug_name: Mapped[str] = mapped_column(String(200), nullable=True)
+    region_name: Mapped[str] = mapped_column(String(200), nullable=True)
+    category: Mapped[str] = mapped_column(String(50), nullable=True)
+    subject: Mapped[str] = mapped_column(String(50), nullable=True)
+    brand: Mapped[str] = mapped_column(String(50), nullable=True)
+    tech_size: Mapped[str] = mapped_column(String(30), nullable=True)
+    sticker: Mapped[str] = mapped_column(String(50), nullable=True)
+    income_id: Mapped[int] = mapped_column(BigInteger, nullable=True)
+
+    synced_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("cabinet_id", "sale_id", name="uq_cabinet_sale"),
+    )
