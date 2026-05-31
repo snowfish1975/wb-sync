@@ -163,7 +163,7 @@ def get_stocks(db: Session, cabinet_id: str | None = None, nm_id: int | None = N
     return q.order_by(Stock.synced_at.desc()).limit(10000).all()
 
 
-def get_orders(db: Session, cabinet_id: str | None = None, days_back: int = 40, limit: int = 1000):
+def get_orders(db: Session, cabinet_id: str | None = None, days_back: int = 40, limit: int = 1000, offset: int = 0):
     """Получение заказов из БД за последние N дней"""
     q = db.query(Order)
     
@@ -174,7 +174,7 @@ def get_orders(db: Session, cabinet_id: str | None = None, days_back: int = 40, 
     threshold_date = datetime.now() - timedelta(days=days_back)
     q = q.filter(Order.date >= threshold_date)
     
-    return q.order_by(Order.date.desc()).limit(limit).all()
+    return q.order_by(Order.date.desc()).offset(offset).limit(limit).all()
 
 
 def get_sync_logs(db: Session, limit: int = 50):
@@ -406,6 +406,7 @@ def get_sales(
     nm_id: int | None = None,
     days_back: int = 40,
     limit: int = 1000,
+    offset: int = 0
 ):
     q = db.query(Sale)
     if cabinet_id:
@@ -414,4 +415,4 @@ def get_sales(
         q = q.filter(Sale.nm_id == nm_id)
     threshold = datetime.now() - timedelta(days=days_back)
     q = q.filter(Sale.date >= threshold)
-    return q.order_by(Sale.date.desc()).limit(limit).all()
+    return q.order_by(Sale.date.desc()).offset(offset).limit(limit).all()

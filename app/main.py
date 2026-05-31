@@ -98,11 +98,12 @@ def list_orders(
     nm_id: int | None = Query(None, description="Фильтр по артикулу WB"),
     days_back: int = Query(40, description="За сколько дней вернуть заказы (макс 90)", ge=1, le=90),
     limit: int = Query(1000, description="Максимальное количество записей", le=500000),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
     cid = token_id(body.token)
     mapping = load_tokens_mapping()
-    data = get_orders(db, cabinet_id=cid, days_back=days_back, limit=limit)
+    data = get_orders(db, cabinet_id=cid, days_back=days_back, limit=limit, offset=offset)
     if nm_id:
         data = [item for item in data if item.nm_id == nm_id]
     return [
@@ -120,12 +121,13 @@ def list_sales(
     nm_id: int | None = Query(None, description="Фильтр по артикулу WB"),
     days_back: int = Query(40, description="За сколько дней (макс 90)", ge=1, le=90),
     limit: int = Query(1000, description="Максимальное количество записей", le=500000),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
     """Продажи и возвраты за последние N дней."""
     cid = token_id(body.token)
     mapping = load_tokens_mapping()
-    data = get_sales(db, cabinet_id=cid, nm_id=nm_id, days_back=days_back, limit=limit)
+    data = get_sales(db, cabinet_id=cid, nm_id=nm_id, days_back=days_back, limit=limit, offset=offset)
     return [
         {
             **{k: v for k, v in item.__dict__.items() if not k.startswith("_")},
